@@ -1,0 +1,341 @@
+<!doctype html>
+<html>
+<head>
+<title>UnderCurrent Training 360 server</title>
+<style type=text/css>
+
+body
+{
+	background-color:	#fff;
+	color:			#000;
+	font-family:		"futura-pt",sans-serif;
+	margin:			auto 10% auto 10%;
+}
+
+h1
+{
+	font-size:		30pt;
+	letter-spacing:		-2px;
+	font-weight:		600;
+}
+
+a
+{
+	color:			#c30;
+	font-size:		18pt;
+	font-style:		normal;
+	font-weight:		700;
+	letter-spacing:		4px;
+}
+
+.Center
+{
+	margin:		auto;
+	display:	block;
+	text-align:	center;
+}
+
+Input
+{
+	margin:		4px;
+}
+
+/* off at start */
+#ControlBox
+{
+	display:	none;
+}
+
+#RegisterServerButton
+{
+	display:	none;
+}
+
+
+#ClientListBox
+{
+	margin:		10px;
+	padding:	10px;
+	border:		1px #ccc solid;
+	background-color:	#ffb;
+}
+
+.ClientBox
+{
+	width:		25%;
+	float:		left;
+	margin:		10px;
+	padding:	10px;
+	border:		none;
+	background-color:	#bfb;
+}
+
+#MessageBox
+{
+	margin:		10px;
+	padding:	10px;
+	border:		1px #ccc solid;
+	background-color:	#fbb;
+}
+
+
+
+</style>
+<script src="SoyWebsocket-1.0.js"></script>
+</head>
+<body>
+	<header>		
+		<div class="Center">
+		<h1>UnderCurrent Samsung 360 Training</h1>
+
+		<div id=ConnectionBox>
+		</div>
+
+		<div id=ControlBox style="display:none">
+			<div id=RegisterServerButton style="display:none">
+			<input type=button value="Register Server" onclick=RegisterServer() />
+			</div>
+
+			<div>
+			<input type=button value="Start 01_Unveil_VR Headset.mp4" onclick="SendMessage_Play('01_Unveil_VR Headset.mp4')" />
+			<input type=button value="Start Paramotor.mp4" onclick="SendMessage_Play('Paramotor.mp4')" />
+			<input type=button value="Start Skydiving.mp4" onclick="SendMessage_Play('Skydiving.mp4')" />
+			</div>
+
+			<div>
+			<input type=text id=FilenameInput value="File.mp4" onfocus="this.value=''" />
+			<input type=button value="Play filename" onclick="SendMessage_Play(document.getElementById('FilenameInput').value)" />
+			</div>
+		
+			<div>
+			<input type=button value="Stop" onclick="SendMessage_Stop()" />
+			</div>
+
+			<div>
+			<input type=text id=MessageToClientsInput value="Message to clients..." onfocus="this.value=''" />
+			<input type=button value="Set Status" onclick="SendMessage_SetStatus(document.getElementById('MessageToClientsInput').value)" />
+			</div>
+
+			<div>
+			<input type=button value="Clear Client List" onclick="ClearClientBoxes()" /> <input type=button value="Clear Messages" onclick="ClearMessages()" />
+			</div>
+
+		</div>
+
+		<div>
+		<div id=ClientListBox><div style="clear:both;"></div></div>
+		
+		</div>
+
+		<div id=MessageBox></div>
+
+		<script>
+			var ShowControls = function()
+			{
+				var $div = document.getElementById('ControlBox');
+				$div.style.display = 'block';
+				ClearMessages();		
+				RegisterServer();
+				ClearClientBoxes();
+				LoopUpdateAllClientTextBoxes();
+			}
+
+			function LoopUpdateAllClientTextBoxes()
+			{
+				setTimeout( LoopUpdateAllClientTextBoxes, 100 );
+				UpdateAllClientTextBoxes();
+			}
+			
+			var HideControls = function()
+			{
+				var $div = document.getElementById('ControlBox');
+				$div.style.display = 'none';
+			}
+
+			function LogMessage($MessageString)
+			{
+				//	log unhandled messages
+				var $div = document.getElementById('MessageBox');
+				$div.innerText += $MessageString + "\n";
+			}
+
+			function IsString(value)
+			{
+				return typeof value === 'string';
+			}
+
+			function GetTimeMs()
+			{
+				var d = new Date();
+				var n = d.getTime();
+				return n;
+			}
+
+			function UpdateClientBoxText($ClientBox)
+			{
+				var $Text = 'Client ' + $ClientBox.Client + '\n';
+
+				//	get age
+				var $InvalidAgeSecs = 999999;
+				var $WarningAgeSecs = 8;
+				var $AgeSecs = $InvalidAgeSecs;
+
+				if ( $ClientBox.LastPingTime !== undefined )
+				{
+					var $Now = GetTimeMs();
+					$AgeSecs = ($Now - $ClientBox.LastPingTime) / 1000;
+				}
+
+				if ( $AgeSecs >= $InvalidAgeSecs-1 )
+					$Text += 'Waiting for ping.' + '\n';
+				else
+					$Text += 'Last heard ' + $AgeSecs + ' secs ago';
+
+				if ( $AgeSecs > $WarningAgeSecs )
+					$ClientBox.style.backgroundColor = '#fcc';
+				else
+					$ClientBox.style.backgroundColor = '#cfc';
+
+				$ClientBox.innerText = $Text;
+			}
+
+			function UpdateAllClientTextBoxes()
+			{
+				var $ClientBoxes = GetClientBoxes();
+				$ClientBoxes.forEach( function($element)	{	UpdateClientBoxText($element);	}	);
+			}
+
+			function RefreshPing($Client)
+			{
+				var $ClientBox = GetClientBox( $Client );
+				$ClientBox.LastPingTime = GetTimeMs();
+				UpdateClientBoxText( $ClientBox );
+			}
+
+			function HandleClientMessage($Client,$Message)
+			{
+				try
+				{
+					var $ClientBox = GetClientBox( $Client );
+					if ( IsString($Message) )
+						$Message = JSON.parse( $Message );
+
+					//	refresh ping on any message
+					RefreshPing($Client);				
+
+					if ( $Message.Command == 'Ping' )
+					{
+						RefreshPing($Client);
+						return;
+					}
+					throw "Unhandled.";
+				}
+				catch($e)
+				{
+					LogMessage("Failed to parse message from " + $Client + ": " + $e + " (" + $Message + ")" );
+				}
+			}
+						
+
+			function OnMessage($Socket,$MessageString)
+			{
+				try
+				{
+					$ClientMessage = JSON.parse( $MessageString );
+					var $Client = $ClientMessage.Client;
+					if ( $Client !== undefined )
+					{
+						HandleClientMessage( $Client, $ClientMessage.Message );
+						return;
+					}
+				}
+				catch($e)
+				{
+				}
+
+				LogMessage($MessageString);
+			}
+
+			function ClearMessages($Socket,$MessageString)
+			{
+				var $div = document.getElementById('MessageBox');
+				$div.innerText = '';
+			}
+
+			var DefaultHostname = window.location.hostname + ":8080";
+			var Socket = new SoyWebSocket(null, DefaultHostname, document.getElementById('ConnectionBox'), ShowControls, HideControls );
+			Socket.mOnMessage = OnMessage;
+
+			function RegisterServer()
+			{
+				Socket.SendMessage('iamserver');
+			}
+
+			function SendMessage_Play(Filename)
+			{
+				var Command = {};
+				Command.Command = 'Play';
+				Command.Filename = Filename;
+				Socket.SendMessage( JSON.stringify(Command) );
+			}
+
+			function SendMessage_Stop(Filename)
+			{
+				var Command = {};
+				Command.Command = 'Stop';
+				Socket.SendMessage( JSON.stringify(Command) );
+			}
+
+			function SendMessage_SetStatus(Message)
+			{
+				var Command = {};
+				Command.Command = 'SetStatus';
+				Command.Status = Message;
+				Socket.SendMessage( JSON.stringify(Command) );
+			}
+
+			function GetClientBoxes()
+			{
+				return Array.from( document.getElementsByClassName('ClientBox') );
+			}
+
+			function ClearClientBoxes()
+			{
+				var $ClientBoxes = GetClientBoxes();
+				var Remove = function($Element)
+				{
+					$Element.parentNode.removeChild($Element);
+				};
+				$ClientBoxes.forEach ( Remove );
+			}
+
+			function CreateClientBox($Client)
+			{
+				var $div = document.createElement("DIV");
+				$div.Client = $Client;
+				$div.className = 'ClientBox';
+
+				var $ClientBoxParent = document.getElementById('ClientListBox');
+				$ClientBoxParent.insertBefore( $div, $ClientBoxParent.firstChild );
+				UpdateClientBoxText( $div );
+				return $div;
+			}
+			
+			function GetClientBox($Client)
+			{
+				//	look for all
+				var $ClientBoxes = GetClientBoxes();
+				var $ClientBox = null;
+				$ClientBoxes.forEach( function($Element)	{	if ( $Element.Client == $Client )	$ClientBox = $Element;	} );
+				if ( $ClientBox == null )
+					$ClientBox = CreateClientBox( $Client );
+				return $ClientBox;
+			}
+
+
+		</script>
+
+		</div>
+	</header>
+</body>
+</html>
