@@ -1,3 +1,6 @@
-#ignore built files
+# ignore built files
 *.DockerImage
+
+# ignore repos
+.git
 

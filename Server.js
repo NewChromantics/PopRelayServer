@@ -13,6 +13,7 @@ var DgramPort = 8081;
 var PathPrefix = './';
 var LocalIP = ip.address();
 var udpResponse = LocalIP+':'+HttpPort;
+var RootUrlFile = 'Server.html';
 
 // console.log(LocalIP);
 
@@ -29,7 +30,7 @@ function GetFilename(Url)
 	var Filename = Url.replace('/','');
 	
 	if ( Filename.length == 0 )
-		Filename = 'operator.html';
+		Filename = RootUrlFile;
 
 	Filename = PathPrefix + Filename;
 
@@ -297,7 +298,11 @@ socket.bind(DgramPort);
 
 
 
-
+fs.appendFile( PathPrefix + 'bootup.txt', 'Booted.\n', function (err) {
+  if (err) {
+   	console.log("Error writing to bootup.txt; " + err);
+  }
+});
 
 
 

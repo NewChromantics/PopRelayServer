@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
 <head>
-<title>UnderCurrent Training 360 server</title>
+<title>PopRelayServer Test</title>
 <style type=text/css>
 
 body
@@ -46,9 +46,8 @@ Input
 	display:	none;
 }
 
-#RegisterServerButton
+#RegisterButton
 {
-	display:	none;
 }
 
 
@@ -86,20 +85,19 @@ Input
 <body>
 	<header>		
 		<div class="Center">
-		<h1>UnderCurrent Samsung 360 Training</h1>
+		<h1>PopRelay</h1>
 
 		<div id=ConnectionBox>
 		</div>
 
-		<div id=ControlBox style="display:none">
-			<div id=RegisterServerButton style="display:none">
+		<div id=ControlBox>
+			<div id=RegisterButton>
 			<input type=button value="Register Server" onclick=RegisterServer() />
+			<input type=button value="Register Client" onclick=RegisterClient() />
 			</div>
 
 			<div>
 			<input type=button value="Start 01_Unveil_VR Headset.mp4" onclick="SendMessage_Play('01_Unveil_VR Headset.mp4')" />
-			<input type=button value="Start Paramotor.mp4" onclick="SendMessage_Play('Paramotor.mp4')" />
-			<input type=button value="Start Skydiving.mp4" onclick="SendMessage_Play('Skydiving.mp4')" />
 			</div>
 
 			<div>
@@ -135,7 +133,7 @@ Input
 				var $div = document.getElementById('ControlBox');
 				$div.style.display = 'block';
 				ClearMessages();		
-				RegisterServer();
+				//RegisterServer();
 				ClearClientBoxes();
 				LoopUpdateAllClientTextBoxes();
 			}
@@ -196,7 +194,18 @@ Input
 				else
 					$ClientBox.style.backgroundColor = '#cfc';
 
-				$ClientBox.innerText = $Text;
+				//console.log($ClientBox.Status);
+				//$ClientBox.Status.innerText = $Text;
+			}
+
+			function UpdateClientBoxImage($ClientBox,$ImageSource)
+			{
+				//$ClientBox.style.backgroundImage = $ImageSource;
+					
+				var Img = $ClientBox.Image;
+				console.log(Img);
+				Img.src = $ImageSource;
+				//$ClientBox.innerText = $Text;
 			}
 
 			function UpdateAllClientTextBoxes()
@@ -237,7 +246,7 @@ Input
 			}
 						
 
-			function OnMessage($Socket,$MessageString)
+			function OnTextMessage($Socket,$MessageString)
 			{
 				try
 				{
@@ -254,6 +263,26 @@ Input
 				}
 
 				LogMessage($MessageString);
+				ClipClientBoxes(1);
+			}
+
+			function OnBinaryMessage($Socket,$MessageBlob)
+			{
+				$Client = "Server";
+				var $ClientBox = GetClientBox( $Client );
+
+				try
+				{
+					var ImageUrl = URL.createObjectURL($MessageBlob);
+					UpdateClientBoxImage( $ClientBox, ImageUrl );
+					//$ClientBox.appendChild(image);
+				}
+				catch(Exception)
+				{
+					$ClientBox.innertText = "Error creating image";
+				}
+
+				ClipClientBoxes(1);
 			}
 
 			function ClearMessages($Socket,$MessageString)
@@ -264,11 +293,17 @@ Input
 
 			var DefaultHostname = window.location.hostname + ":8080";
 			var Socket = new SoyWebSocket(null, DefaultHostname, document.getElementById('ConnectionBox'), ShowControls, HideControls );
-			Socket.mOnMessage = OnMessage;
+			Socket.mOnTextMessage = OnTextMessage;
+			Socket.mOnBinaryMessage = OnBinaryMessage;
 
 			function RegisterServer()
 			{
 				Socket.SendMessage('iamserver');
+			}
+
+			function RegisterClient()
+			{
+				Socket.SendMessage('iamclient');
 			}
 
 			function SendMessage_Play(Filename)
@@ -299,14 +334,26 @@ Input
 				return Array.from( document.getElementsByClassName('ClientBox') );
 			}
 
-			function ClearClientBoxes()
+			function ClipClientBoxes($Max)
 			{
 				var $ClientBoxes = GetClientBoxes();
 				var Remove = function($Element)
 				{
 					$Element.parentNode.removeChild($Element);
 				};
-				$ClientBoxes.forEach ( Remove );
+				var BreakOut = 1000;
+				while ( $ClientBoxes.length > $Max )
+				{
+					Remove( $ClientBoxes[0] );
+					if ( BreakOut-- <= 0 )
+						break;
+				}
+				//$ClientBoxes.forEach ( Remove );
+			}
+
+			function ClearClientBoxes()
+			{
+				ClipClientBoxes(0);
 			}
 
 			function CreateClientBox($Client)
@@ -318,6 +365,16 @@ Input
 				var $ClientBoxParent = document.getElementById('ClientListBox');
 				$ClientBoxParent.insertBefore( $div, $ClientBoxParent.firstChild );
 				UpdateClientBoxText( $div );
+
+				var Img = new Image();
+				$div.Image = Img;
+				$div.appendChild( $div.Image );
+
+				var Status = document.createElement("DIV");
+				$div.Status = Status;
+				$div.Status.innerText = "Hello.";
+				$div.appendChild( $div.Status );
+
 				return $div;
 			}
 			

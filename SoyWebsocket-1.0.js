@@ -12,7 +12,8 @@ function SoyWebSocket($Name,$DefaultHostname,$ParentDiv,$OnConnected,$OnDisconne
 	this.mConnectingUrl = false;
 	
 	//	default callback functions
-	this.mOnMessage = function($SoyWebSocket,$Message)		{	console.log( $SoyWebSocket.mName + "::mOnMessage()");	}
+	this.mOnTextMessage = function($SoyWebSocket,$Message)		{	console.log( $SoyWebSocket.mName + "::mOnMessage()");	}
+	this.mOnBinaryMessage = function($SoyWebSocket,$Message)		{	console.log( $SoyWebSocket.mName + "::mOnMessage()");	}
 	this.mOnConnected = function($SoyWebSocket)			{	console.log( $SoyWebSocket.mName + "::mOnConnected()");	$OnConnected();		}
 	this.mOnDisconnected = function($SoyWebSocket)		{	console.log( $SoyWebSocket.mName + "::mOnDisconnected()");	$OnDisconnected();	}
 	this.mOnConnecting = function($SoyWebSocket,$Url)		{	console.log( $SoyWebSocket.mName + "::Connecting to " + $Url + "...");	}
@@ -77,10 +78,17 @@ SoyWebSocket.prototype.OnMessage = function($Event)
 //	console.log("on message");
 //	console.log($Event);
 	
-	if ( this.mOnMessage )
+	if ( $Event.data instanceof Blob )
+	{
+		if ( this.mOnBinaryMessage )
+		{
+			this.mOnBinaryMessage( this, $Event.data );
+		}
+	}
+	else if ( this.mOnTextMessage )
 	{
 		$Message = $Event.data;
-		this.mOnMessage( this, $Message );
+		this.mOnTextMessage( this, $Message );
 	}
 }
 
