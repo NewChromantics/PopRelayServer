@@ -139,7 +139,7 @@ Input
 				return n;
 			}
 
-			var $ImageFpsMeta = {'LapTime':GetTimeMs(),'FrameCount':0};
+			var $ImageFpsMeta = {'LapTime':GetTimeMs(),'FrameCount':0,'KbCount':0};
 
 			function UpdateFps()
 			{
@@ -147,10 +147,14 @@ Input
 				var NowMs = GetTimeMs();
 				var LapDurationMs = NowMs - $ImageFpsMeta.LapTime;
 				var LapDurationSecs = LapDurationMs / 1000;
+
 				var FrameRate = $ImageFpsMeta.FrameCount * LapDurationSecs;
-				UpdateFpsMessage( "" + FrameRate + " fps" );
+				var KbRate = $ImageFpsMeta.KbCount * LapDurationSecs;
+				
+				UpdateFpsMessage( "" + FrameRate.toFixed(2) + " fps, " + KbRate.toFixed(2) + " kb/sec" );
 
 				$ImageFpsMeta.FrameCount = 0;
+				$ImageFpsMeta.KbCount = 0;
 				$ImageFpsMeta.LapTime = NowMs;
 			}
 
@@ -172,11 +176,12 @@ Input
 				Box.innerText = $MessageString;
 			}
 
-			function UpdateImage($SourceUrl)
+			function UpdateImage($SourceUrl,$SourceKb)
 			{
 				var Img = document.getElementById('lastImage');
 				Img.src = $SourceUrl;
 				$ImageFpsMeta.FrameCount++;
+				$ImageFpsMeta.KbCount += $SourceKb;
 			}
 
 						
@@ -191,7 +196,7 @@ Input
 				try
 				{
 					var ImageUrl = URL.createObjectURL($MessageBlob);
-					UpdateImage( ImageUrl );
+					UpdateImage( ImageUrl, $MessageBlob.size/1024  );
 				}
 				catch(Exception)
 				{
