@@ -95,37 +95,12 @@ Input
 			<input type=button value="Register Server" onclick=RegisterServer() />
 			<input type=button value="Register Client" onclick=RegisterClient() />
 			</div>
-
-			<div>
-			<input type=button value="Start 01_Unveil_VR Headset.mp4" onclick="SendMessage_Play('01_Unveil_VR Headset.mp4')" />
-			</div>
-
-			<div>
-			<input type=text id=FilenameInput value="File.mp4" onfocus="this.value=''" />
-			<input type=button value="Play filename" onclick="SendMessage_Play(document.getElementById('FilenameInput').value)" />
-			</div>
-		
-			<div>
-			<input type=button value="Stop" onclick="SendMessage_Stop()" />
-			</div>
-
-			<div>
-			<input type=text id=MessageToClientsInput value="Message to clients..." onfocus="this.value=''" />
-			<input type=button value="Set Status" onclick="SendMessage_SetStatus(document.getElementById('MessageToClientsInput').value)" />
-			</div>
-
-			<div>
-			<input type=button value="Clear Client List" onclick="ClearClientBoxes()" /> <input type=button value="Clear Messages" onclick="ClearMessages()" />
-			</div>
-
 		</div>
 
-		<div>
-		<div id=ClientListBox><div style="clear:both;"></div></div>
+		<div id=LastTextMessage></div>
+		<div id=LastErrorMessage></div>
+		<div id=LastImageBox><img id=lastImage /><div id=ImageFrameRate>X fps</div></div>
 		
-		</div>
-
-		<div id=MessageBox></div>
 
 		<script>
 			var ShowControls = function()
@@ -144,12 +119,7 @@ Input
 				UpdateAllClientTextBoxes();
 			}
 			
-			var HideControls = function()
-			{
-				var $div = document.getElementById('ControlBox');
-				$div.style.display = 'none';
-			}
-
+			
 			function LogMessage($MessageString)
 			{
 				//	log unhandled messages
@@ -169,130 +139,70 @@ Input
 				return n;
 			}
 
-			function UpdateClientBoxText($ClientBox)
+			var $ImageFpsMeta = {'LapTime':GetTimeMs(),'FrameCount':0};
+
+			function UpdateFps()
 			{
-				var $Text = 'Client ' + $ClientBox.Client + '\n';
+				//	time since last lap in secs
+				var NowMs = GetTimeMs();
+				var LapDurationMs = NowMs - $ImageFpsMeta.LapTime;
+				var LapDurationSecs = LapDurationMs / 1000;
+				var FrameRate = $ImageFpsMeta.FrameCount * LapDurationSecs;
+				UpdateFpsMessage( "" + FrameRate + " fps" );
 
-				//	get age
-				var $InvalidAgeSecs = 999999;
-				var $WarningAgeSecs = 8;
-				var $AgeSecs = $InvalidAgeSecs;
-
-				if ( $ClientBox.LastPingTime !== undefined )
-				{
-					var $Now = GetTimeMs();
-					$AgeSecs = ($Now - $ClientBox.LastPingTime) / 1000;
-				}
-
-				if ( $AgeSecs >= $InvalidAgeSecs-1 )
-					$Text += 'Waiting for ping.' + '\n';
-				else
-					$Text += 'Last heard ' + $AgeSecs + ' secs ago';
-
-				if ( $AgeSecs > $WarningAgeSecs )
-					$ClientBox.style.backgroundColor = '#fcc';
-				else
-					$ClientBox.style.backgroundColor = '#cfc';
-
-				//console.log($ClientBox.Status);
-				//$ClientBox.Status.innerText = $Text;
+				$ImageFpsMeta.FrameCount = 0;
+				$ImageFpsMeta.LapTime = NowMs;
 			}
 
-			function UpdateClientBoxImage($ClientBox,$ImageSource)
+			function UpdateMessage($MessageString)
 			{
-				//$ClientBox.style.backgroundImage = $ImageSource;
-					
-				var Img = $ClientBox.Image;
-				console.log(Img);
-				Img.src = $ImageSource;
-				//$ClientBox.innerText = $Text;
+				var Box = document.getElementById('LastTextMessage');
+				Box.innerText = $MessageString;
 			}
 
-			function UpdateAllClientTextBoxes()
+			function UpdateErrorMessage($MessageString)
 			{
-				var $ClientBoxes = GetClientBoxes();
-				$ClientBoxes.forEach( function($element)	{	UpdateClientBoxText($element);	}	);
+				var Box = document.getElementById('LastErrorMessage');
+				Box.innerText = $MessageString;
 			}
 
-			function RefreshPing($Client)
+			function UpdateFpsMessage($MessageString)
 			{
-				var $ClientBox = GetClientBox( $Client );
-				$ClientBox.LastPingTime = GetTimeMs();
-				UpdateClientBoxText( $ClientBox );
+				var Box = document.getElementById('ImageFrameRate');
+				Box.innerText = $MessageString;
 			}
 
-			function HandleClientMessage($Client,$Message)
+			function UpdateImage($SourceUrl)
 			{
-				try
-				{
-					var $ClientBox = GetClientBox( $Client );
-					if ( IsString($Message) )
-						$Message = JSON.parse( $Message );
-
-					//	refresh ping on any message
-					RefreshPing($Client);				
-
-					if ( $Message.Command == 'Ping' )
-					{
-						RefreshPing($Client);
-						return;
-					}
-					throw "Unhandled.";
-				}
-				catch($e)
-				{
-					LogMessage("Failed to parse message from " + $Client + ": " + $e + " (" + $Message + ")" );
-				}
+				var Img = document.getElementById('lastImage');
+				Img.src = $SourceUrl;
+				$ImageFpsMeta.FrameCount++;
 			}
+
 						
 
 			function OnTextMessage($Socket,$MessageString)
 			{
-				try
-				{
-					$ClientMessage = JSON.parse( $MessageString );
-					var $Client = $ClientMessage.Client;
-					if ( $Client !== undefined )
-					{
-						HandleClientMessage( $Client, $ClientMessage.Message );
-						return;
-					}
-				}
-				catch($e)
-				{
-				}
-
-				LogMessage($MessageString);
-				ClipClientBoxes(1);
+				UpdateMessage( $MessageString );
 			}
 
 			function OnBinaryMessage($Socket,$MessageBlob)
 			{
-				$Client = "Server";
-				var $ClientBox = GetClientBox( $Client );
-
 				try
 				{
 					var ImageUrl = URL.createObjectURL($MessageBlob);
-					UpdateClientBoxImage( $ClientBox, ImageUrl );
-					//$ClientBox.appendChild(image);
+					UpdateImage( ImageUrl );
 				}
 				catch(Exception)
 				{
-					$ClientBox.innertText = "Error creating image";
+					UpdateErrorMessage("Error creating image:" + Exception );
 				}
 
-				ClipClientBoxes(1);
 			}
 
-			function ClearMessages($Socket,$MessageString)
-			{
-				var $div = document.getElementById('MessageBox');
-				$div.innerText = '';
-			}
 
 			var DefaultHostname = window.location.hostname + ":8080";
-			var Socket = new SoyWebSocket(null, DefaultHostname, document.getElementById('ConnectionBox'), ShowControls, HideControls );
+			var Socket = new SoyWebSocket(null, DefaultHostname, document.getElementById('ConnectionBox'), RegisterClient, function(){} );
 			Socket.mOnTextMessage = OnTextMessage;
 			Socket.mOnBinaryMessage = OnBinaryMessage;
 
@@ -306,89 +216,7 @@ Input
 				Socket.SendMessage('iamclient');
 			}
 
-			function SendMessage_Play(Filename)
-			{
-				var Command = {};
-				Command.Command = 'Play';
-				Command.Filename = Filename;
-				Socket.SendMessage( JSON.stringify(Command) );
-			}
-
-			function SendMessage_Stop(Filename)
-			{
-				var Command = {};
-				Command.Command = 'Stop';
-				Socket.SendMessage( JSON.stringify(Command) );
-			}
-
-			function SendMessage_SetStatus(Message)
-			{
-				var Command = {};
-				Command.Command = 'SetStatus';
-				Command.Status = Message;
-				Socket.SendMessage( JSON.stringify(Command) );
-			}
-
-			function GetClientBoxes()
-			{
-				return Array.from( document.getElementsByClassName('ClientBox') );
-			}
-
-			function ClipClientBoxes($Max)
-			{
-				var $ClientBoxes = GetClientBoxes();
-				var Remove = function($Element)
-				{
-					$Element.parentNode.removeChild($Element);
-				};
-				var BreakOut = 1000;
-				while ( $ClientBoxes.length > $Max )
-				{
-					Remove( $ClientBoxes[0] );
-					if ( BreakOut-- <= 0 )
-						break;
-				}
-				//$ClientBoxes.forEach ( Remove );
-			}
-
-			function ClearClientBoxes()
-			{
-				ClipClientBoxes(0);
-			}
-
-			function CreateClientBox($Client)
-			{
-				var $div = document.createElement("DIV");
-				$div.Client = $Client;
-				$div.className = 'ClientBox';
-
-				var $ClientBoxParent = document.getElementById('ClientListBox');
-				$ClientBoxParent.insertBefore( $div, $ClientBoxParent.firstChild );
-				UpdateClientBoxText( $div );
-
-				var Img = new Image();
-				$div.Image = Img;
-				$div.appendChild( $div.Image );
-
-				var Status = document.createElement("DIV");
-				$div.Status = Status;
-				$div.Status.innerText = "Hello.";
-				$div.appendChild( $div.Status );
-
-				return $div;
-			}
-			
-			function GetClientBox($Client)
-			{
-				//	look for all
-				var $ClientBoxes = GetClientBoxes();
-				var $ClientBox = null;
-				$ClientBoxes.forEach( function($Element)	{	if ( $Element.Client == $Client )	$ClientBox = $Element;	} );
-				if ( $ClientBox == null )
-					$ClientBox = CreateClientBox( $Client );
-				return $ClientBox;
-			}
-
+			setInterval( UpdateFps, 1000 );
 
 		</script>
 
