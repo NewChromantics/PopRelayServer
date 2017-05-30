@@ -8,11 +8,12 @@ var ip = require('ip');
 
 
 //	gr: make these env vars from docker host
-var HttpPort = 8080;
-var DgramPort = 8081;
-var PathPrefix = './';
+var ClientPort = 8080;
+var ServerPort = 8081;
+var DiscoverPort = 8082;
+
 var LocalIP = ip.address();
-var udpResponse = LocalIP+':'+HttpPort;
+var PathPrefix = './';
 var RootUrlFile = 'Server.html';
 
 // console.log(LocalIP);
@@ -80,8 +81,8 @@ function GetMime(Filename)
 }
 
 
-
-var server = http.createServer(function(request, response) {
+function HandleClientWebpageRequest(request, response) 
+{
 	console.log((new Date()) + ' Received request for ' + request.url);
 
 	var Filename = GetFilename( request.url );
@@ -104,16 +105,48 @@ var server = http.createServer(function(request, response) {
 	var fileStream = fs.createReadStream( Filename );
 	fileStream.pipe( response );	
 	//response.end( GetFileContentsString( Filename ) );
+}
+
+
+function HandleServerWebpageRequest(request, response) 
+{
+	if ( request.url == ‘/‘ )
+	{
+		response.writeHead(200);
+		response.write("Server.");
+		response.end();
+		return;
+	}
+	response.writeHead(404);
+	response.write(request.url);
+	response.end();
+	response.end();
+}
+
+var ServerHttp = http.createServer( HandleServerWebpageRequest );
+var ClientHttp = http.createServer( HandleClientWebpageRequest );
+
+
+ClientHttp.listen(ClientPort, function() {
+    console.log((new Date()) + ' Websocket ClientHttp is listening on port ' + HttpPort );
 });
 
-
-server.listen(HttpPort, function() {
-    console.log((new Date()) + ' Websocket Server is listening on port ' + HttpPort );
+ServerHttp.listen(ServerPort, function() {
+    console.log((new Date()) + ' Websocket ServerHttp is listening on port ' + HttpPort );
 });
 
+var ServerWebsocket = new WebSocketServer({
+    httpServer: ServerHttp,
+    // You should not use autoAcceptConnections for production
+    // applications, as it defeats all standard cross-origin protection
+    // facilities built into the protocol and the browser.  You should
+    // *always* verify the connection's origin and decide whether or not
+    // to accept it.
+    autoAcceptConnections: false
+});
 
-wsServer = new WebSocketServer({
-    httpServer: server,
+var ClientWebsocket = new WebSocketServer({
+    httpServer: ClientHttp,
     // You should not use autoAcceptConnections for production
     // applications, as it defeats all standard cross-origin protection
     // facilities built into the protocol and the browser.  You should
@@ -215,86 +248,105 @@ function OnServerPacket($Connection,$MessageBytes)
 	Relay( $Connection, function(target) { target.sendBytes(LastPacket); } );
 }
 
-var OnWebsocketRequest = function(request){
+var OnServerWebsocketConnection = function(request)
+{
+	if (!originIsAllowed(request.origin)) 
+	{
+		// Make sure we only accept requests from an allowed origin
+		request.reject();
+		console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.');
+		return;
+	}
 
-	// 
-
-	// console.log("HMMM CONNECTED");
-
-	// console.log('request', request);
-
-    if (!originIsAllowed(request.origin)) {
-      // Make sure we only accept requests from an allowed origin
-      request.reject();
-      console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.');
-      return;
-    }
 
 	//var connection = request.accept('echo-protocol', request.origin);
 	var connection = request.accept(null, request.origin);
-	console.log((new Date()) + ' websocket Connection accepted.');
+	console.log((new Date()) + ' websocket server connection accepted.');
+	RegisterServer( connection );
 
-	connection.on('message', function(message) {
-		if (message.type === 'utf8') {
-			console.log('Received Message: ' + message.utf8Data);
-
-			if ( message.utf8Data == 'iamserver' ){
-				RegisterServer( connection );
-				SetClientStatus( connection, "Registered server OK" );
-			}else if ( message.utf8Data == 'iamclient' ){
-				RegisterClient( connection );
-				SetClientStatus( connection, "Registered client,\nnow waiting for instructions." );
-			}else{
-				var $Message = message.utf8Data;
-
-				if ( IsClient( connection ) ){
-					$Message = WrapClientMessage( connection , $Message );
-					console.log('Wrapped client message: ' + $Message );
-				}
-
-				//	echo to targets
-				Relay( connection, function(target) { target.sendUTF($Message); } );
-			}
+	connection.on('message', function(message) 
+	{
+		if (message.type === 'utf8') 
+		{
+			var $Message = message.utf8Data;
+			console.log('Received Message: ' + $Message);
+			Relay( connection, function(target) { target.sendUTF($Message); } );
 		}
 		else if (message.type === 'binary') 
 		{
-			var FromClient = IsClient( connection );
-			console.log('Received Binary Message of ' + message.binaryData.length + ' bytes from ' + (FromClient?'client':'server') );
-
-			if ( !FromClient )
-			{
-				OnServerPacket( connection, message.binaryData );
-			}
+			console.log('Received Binary Message of ' + message.binaryData.length + ' bytes from server');
+			OnServerPacket( connection, message.binaryData );
 		}
 	});
 
-	connection.on('close', function(reasonCode, description){
+	connection.on('close', function(reasonCode, description)
+	{
 		Unregister( connection );
 	});
 };
 
-wsServer.on('request', OnWebsocketRequest );
+
+var OnClientWebsocketConnection = function(request)
+{
+	if (!originIsAllowed(request.origin)) 
+	{
+		// Make sure we only accept requests from an allowed origin
+		request.reject();
+		console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.');
+		return;
+	}
+
+	//var connection = request.accept('echo-protocol', request.origin);
+	var connection = request.accept(null, request.origin);
+	console.log((new Date()) + ' websocket client connection accepted.');
+	RegisterClient( connection );
+
+	connection.on('message', function(message) 
+	{
+		if (message.type === 'utf8') 
+		{
+			var $Message = message.utf8Data;
+			console.log('Received Client Message: ' + $Message);
+		}
+		else if (message.type === 'binary') 
+		{
+			console.log('Received Client Binary Message of ' + message.binaryData.length + ' bytes');
+		}
+	});
+
+	connection.on('close', function(reasonCode, description)
+	{
+		Unregister( connection );
+	});
+};
+
+
+ServerWebsocket.on('request', OnServerWebsocketConnection );
+ClientWebsocket.on('request', OnClientWebsocketConnection );
 
 
 
 
 
-socket = dgram.createSocket('udp4');
+var BroadcastSocket = dgram.createSocket('udp4');
 
-socket.on('message', function (msg, info){
-	//console.log(info);
-	//console.log(msg.toString());
-	if(msg.toString() == 'whoisserver'){
+BroadcastSocket.on('message', function (msg, info)
+{
+	console.log(info);
+	console.log(msg.toString());
+	if(msg.toString() == 'whoisserver')
+	{
 		//console.log("SENDING");
+		var udpResponse = LocalIP+':'+ServerPort;
 		socket.send(udpResponse, 0, udpResponse.length, info.port, info.address );
 	}
 });
 
-socket.on('listening', function(){
-    console.log((new Date()) + ' UDP Server is listening on port ' + DgramPort );
+BroadcastSocket.on('listening', function(){
+    console.log((new Date()) + ' UDP Server is listening on port ' + BroadcastPort );
 });
 
-socket.bind(DgramPort);
+socket.bind( BroadcastPort );
 
 
 
