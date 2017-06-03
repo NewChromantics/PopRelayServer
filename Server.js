@@ -110,7 +110,7 @@ function HandleClientWebpageRequest(request, response)
 
 function HandleServerWebpageRequest(request, response) 
 {
-	if ( request.url == ‘/‘ )
+	if ( request.url == '/' )
 	{
 		response.writeHead(200);
 		response.write("Server.");
@@ -128,11 +128,11 @@ var ClientHttp = http.createServer( HandleClientWebpageRequest );
 
 
 ClientHttp.listen(ClientPort, function() {
-    console.log((new Date()) + ' Websocket ClientHttp is listening on port ' + HttpPort );
+    console.log((new Date()) + ' Websocket ClientHttp is listening on port ' + ClientPort );
 });
 
 ServerHttp.listen(ServerPort, function() {
-    console.log((new Date()) + ' Websocket ServerHttp is listening on port ' + HttpPort );
+    console.log((new Date()) + ' Websocket ServerHttp is listening on port ' + ServerPort );
 });
 
 var ServerWebsocket = new WebSocketServer({
@@ -338,15 +338,15 @@ BroadcastSocket.on('message', function (msg, info)
 	{
 		//console.log("SENDING");
 		var udpResponse = LocalIP+':'+ServerPort;
-		socket.send(udpResponse, 0, udpResponse.length, info.port, info.address );
+		BroadcastSocket.send(udpResponse, 0, udpResponse.length, info.port, info.address );
 	}
 });
 
 BroadcastSocket.on('listening', function(){
-    console.log((new Date()) + ' UDP Server is listening on port ' + BroadcastPort );
+    console.log((new Date()) + ' UDP Server is listening on port ' + DiscoverPort );
 });
 
-socket.bind( BroadcastPort );
+BroadcastSocket.bind( DiscoverPort );
 
 
 
