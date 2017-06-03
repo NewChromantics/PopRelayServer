@@ -35,6 +35,11 @@ a
 	text-align:	center;
 }
 
+#LastTextMessage
+{
+	text-align:	left;
+}
+
 Input
 {
 	margin:		4px;
@@ -98,6 +103,7 @@ Input
 		</div>
 
 		<div id=LastTextMessage></div>
+		<div id=TextFrameRate>X fps</div>
 		<div id=LastErrorMessage></div>
 		<div id=LastImageBox><img id=lastImage /><div id=ImageFrameRate>X fps</div></div>
 		
@@ -139,23 +145,28 @@ Input
 				return n;
 			}
 
-			var $ImageFpsMeta = {'LapTime':GetTimeMs(),'FrameCount':0,'KbCount':0};
+			var $FpsMeta = {'LapTime':GetTimeMs(),'ImageFrameCount':0,'ImageKbCount':0,'TextFrameCount':0,'TextKbCount':0};
 
 			function UpdateFps()
 			{
 				//	time since last lap in secs
 				var NowMs = GetTimeMs();
-				var LapDurationMs = NowMs - $ImageFpsMeta.LapTime;
+				var LapDurationMs = NowMs - $FpsMeta.LapTime;
 				var LapDurationSecs = LapDurationMs / 1000;
 
-				var FrameRate = $ImageFpsMeta.FrameCount * LapDurationSecs;
-				var KbRate = $ImageFpsMeta.KbCount * LapDurationSecs;
+				var ImageFrameRate = $FpsMeta.ImageFrameCount * LapDurationSecs;
+				var ImageKbRate = $FpsMeta.ImageKbCount * LapDurationSecs;
+				var TextFrameRate = $FpsMeta.TextFrameCount * LapDurationSecs;
+				var TextKbRate = $FpsMeta.TextKbCount * LapDurationSecs;
 				
-				UpdateFpsMessage( "" + FrameRate.toFixed(2) + " fps, " + KbRate.toFixed(2) + " kb/sec" );
+				UpdateImageFpsMessage( "" + ImageFrameRate.toFixed(2) + " fps, " + ImageKbRate.toFixed(2) + " kb/sec" );
+				UpdateTextFpsMessage( "" + TextFrameRate.toFixed(2) + " fps, " + TextKbRate.toFixed(2) + " kb/sec" );
 
-				$ImageFpsMeta.FrameCount = 0;
-				$ImageFpsMeta.KbCount = 0;
-				$ImageFpsMeta.LapTime = NowMs;
+				$FpsMeta.ImageFrameCount = 0;
+				$FpsMeta.ImageKbCount = 0;
+				$FpsMeta.TextFrameCount = 0;
+				$FpsMeta.TextKbCount = 0;
+				$FpsMeta.LapTime = NowMs;
 			}
 
 			function UpdateMessage($MessageString)
@@ -170,9 +181,15 @@ Input
 				Box.innerText = $MessageString;
 			}
 
-			function UpdateFpsMessage($MessageString)
+			function UpdateImageFpsMessage($MessageString)
 			{
 				var Box = document.getElementById('ImageFrameRate');
+				Box.innerText = $MessageString;
+			}
+
+			function UpdateTextFpsMessage($MessageString)
+			{
+				var Box = document.getElementById('TextFrameRate');
 				Box.innerText = $MessageString;
 			}
 
@@ -180,8 +197,8 @@ Input
 			{
 				var Img = document.getElementById('lastImage');
 				Img.src = $SourceUrl;
-				$ImageFpsMeta.FrameCount++;
-				$ImageFpsMeta.KbCount += $SourceKb;
+				$FpsMeta.ImageFrameCount++;
+				$FpsMeta.ImageKbCount += $SourceKb;
 			}
 
 						
@@ -189,6 +206,8 @@ Input
 			function OnTextMessage($Socket,$MessageString)
 			{
 				UpdateMessage( $MessageString );
+				$FpsMeta.TextFrameCount++;
+				$FpsMeta.TextKbCount += $MessageString.length / 1024;
 			}
 
 			function OnBinaryMessage($Socket,$MessageBlob)
