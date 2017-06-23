@@ -12,3 +12,9 @@ Running locally on Windows & Osx
 - open a terminal, `cd` into this directory and run `node Server.js` and the two websockets should open. 
 - Navigate to http://localhost:8080/ to see the test interface.
 - Connect to see messages as a client.
+
+Usage
+=========================
+- As an observing client, connect a websocket to `<ip>:8080`. Binary & Text messages will come in as the server sends them
+- As a god(server in the literal sense) connect a websocket to `<ip>:8081`. All messages (Binary & Text) will be relayed to all clients
+- To find the server on the LAN, send a UDP broadcast packet with `whoisserver` to port `8082` and a reply with the server IP and port(8081) will be replied.
