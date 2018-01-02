@@ -14,8 +14,8 @@ function SoyWebSocket($Name,$DefaultHostname,$ParentDiv,$OnConnected,$OnDisconne
 	//	default callback functions
 	this.mOnTextMessage = function($SoyWebSocket,$Message)		{	console.log( $SoyWebSocket.mName + "::mOnMessage()");	}
 	this.mOnBinaryMessage = function($SoyWebSocket,$Message)		{	console.log( $SoyWebSocket.mName + "::mOnMessage()");	}
-	this.mOnConnected = function($SoyWebSocket)			{	console.log( $SoyWebSocket.mName + "::mOnConnected()");	$OnConnected();		}
-	this.mOnDisconnected = function($SoyWebSocket)		{	console.log( $SoyWebSocket.mName + "::mOnDisconnected()");	$OnDisconnected();	}
+	this.mOnConnected = function($SoyWebSocket)			{	console.log( $SoyWebSocket.mName + "::mOnConnected()");	$OnConnected($SoyWebSocket);		}
+	this.mOnDisconnected = function($SoyWebSocket)		{	console.log( $SoyWebSocket.mName + "::mOnDisconnected()");	$OnDisconnected($SoyWebSocket);	}
 	this.mOnConnecting = function($SoyWebSocket,$Url)		{	console.log( $SoyWebSocket.mName + "::Connecting to " + $Url + "...");	}
 
 	this.CreateUI( $DefaultHostname, $ParentDiv );

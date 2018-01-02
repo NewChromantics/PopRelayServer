@@ -2,6 +2,7 @@
 <html>
 <head>
 <title>PopRelayServer Test</title>
+<link rel="stylesheet" type="text/css" href="http://panopo.ly/panopoly.css">
 <style type=text/css>
 
 body
@@ -14,9 +15,11 @@ body
 
 h1
 {
-	font-size:		30pt;
+	font-size:			30pt;
 	letter-spacing:		-2px;
 	font-weight:		600;
+	font-family:		"futura";
+	margin:				none;
 }
 
 a
@@ -42,7 +45,7 @@ a
 
 Input
 {
-	margin:		4px;
+	margin:		10px;
 }
 
 /* off at start */
@@ -74,7 +77,7 @@ Input
 	background-color:	#bfb;
 }
 
-#MessageBox
+.MessageBox, #LastTextMessage, #LastErrorMessage, #TextFrameRate, #LastImageBox
 {
 	margin:		10px;
 	padding:	10px;
@@ -82,7 +85,18 @@ Input
 	background-color:	#fbb;
 }
 
+header div, header h1
+{
+	margin: 0pt;
+	float:	left;
+}
 
+header:after
+{
+	clear:		both;
+	content:	"";
+	display:	block;
+}
 
 </style>
 <script src="SoyWebsocket-1.0.js"></script>
@@ -90,9 +104,11 @@ Input
 <body>
 	<header>		
 		<div class="Center">
-		<h1>PopRelay</h1>
+		<h1 id="Panopoly">PopRelay</h1>
 
-		<div id=ConnectionBox>
+		<div id=ServerConnectionBox>
+		</div>
+		<div id=ClientConnectionBox>
 		</div>
 
 		<div id=ControlBox>
@@ -101,12 +117,17 @@ Input
 			<input type=button value="Register Client" onclick=RegisterClient() />
 			</div>
 		</div>
+		
+	</header>
 
 		<div id=LastTextMessage></div>
 		<div id=TextFrameRate>X fps</div>
 		<div id=LastErrorMessage></div>
 		<div id=LastImageBox><img id=lastImage /><div id=ImageFrameRate>X fps</div></div>
-		
+		<div>
+			<input id=ClearLogMessagesButton type=button value="Clear" onclick=ClearLogMessages() />
+			<div id=LogMessages></div>
+		</div>
 
 		<script>
 			var ShowControls = function()
@@ -125,12 +146,31 @@ Input
 				UpdateAllClientTextBoxes();
 			}
 			
-			
+			function ClearLogMessages()
+			{
+				var $div = document.getElementById('LogMessages');
+				while ($div.firstChild) {
+					$div.removeChild($div.firstChild);
+				}
+				
+				var $button = document.getElementById('ClearLogMessagesButton');
+				$button.style.visibility = 'hidden';
+			}
+		
 			function LogMessage($MessageString)
 			{
 				//	log unhandled messages
-				var $div = document.getElementById('MessageBox');
-				$div.innerText += $MessageString + "\n";
+				var $div = document.getElementById('LogMessages');
+				
+				var MessageDiv = document.createElement('span');
+				MessageDiv.innerText = $MessageString;
+				MessageDiv.className = 'MessageBox';
+				console.log(MessageDiv);
+				$div.appendChild( MessageDiv );
+				
+				
+				var $button = document.getElementById('ClearLogMessagesButton');
+				$button.style.visibility = 'inherit';
 			}
 
 			function IsString(value)
@@ -225,26 +265,39 @@ Input
 			}
 
 
-			var DefaultHostname = window.location.hostname + ":8080";
-			var Socket = new SoyWebSocket(null, DefaultHostname, document.getElementById('ConnectionBox'), RegisterClient, function(){} );
-			Socket.mOnTextMessage = OnTextMessage;
-			Socket.mOnBinaryMessage = OnBinaryMessage;
-
-			function RegisterServer()
+			function RegisterServer(Socket)
 			{
+				LogMessage("Registering as server");
 				Socket.SendMessage('iamserver');
 			}
-
-			function RegisterClient()
+		
+			function RegisterClient(Socket)
 			{
+				LogMessage("Registering as client");
 				Socket.SendMessage('iamclient');
 			}
+
+
+
+			//	bootup
+
+			ClearLogMessages();
+			
+			var DefaultClientHostname = window.location.hostname + ":8080";
+			var ClientSocket = new SoyWebSocket(null, DefaultClientHostname, document.getElementById('ClientConnectionBox'), RegisterClient, function(){} );
+			ClientSocket.mOnTextMessage = OnTextMessage;
+			ClientSocket.mOnBinaryMessage = OnBinaryMessage;
+			
+			var DefaultServerHostname = window.location.hostname + ":8081";
+			var ServerSocket = new SoyWebSocket(null, DefaultServerHostname, document.getElementById('ServerConnectionBox'), RegisterServer, function(){} );
+			ServerSocket.mOnTextMessage = OnTextMessage;
+			ServerSocket.mOnBinaryMessage = OnBinaryMessage;
 
 			setInterval( UpdateFps, 1000 );
 
 		</script>
 
 		</div>
-	</header>
+
 </body>
 </html>
