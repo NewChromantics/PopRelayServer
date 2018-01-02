@@ -3,7 +3,6 @@
 <head>
 <title>PopRelayServer Test</title>
 <link rel="stylesheet" type="text/css" href="http://panopo.ly/panopoly.css">
-<script src="libvorbis/js/libvorbis.min.js"></script>
 <script src="oggvorbisencoderjs/lib/OggVorbisEncoder.js"></script>
 <style type=text/css>
 
@@ -431,16 +430,16 @@ header:after, #MicRecorder:after
 					var Encoding_Pcm16 = 'Pcm16';
 					var Encoding_Vorbis = 'Vorbis';
 					
-					var Encoding = Encoding_Vorbis;
+					var Encoding = [ Encoding_Vorbis ];
 					var EncodeBase64 = true;
 					
-					if ( Encoding == Encoding_Vorbis )
+					if ( Encoding[0] == Encoding_Vorbis )
 					{
 						if ( Stream.VorbisEncoder === undefined )
 						{
 							var SampleRate = 44100;
 							var Channels = 1;
-							var Quality = 0.3;
+							var Quality = 0.5;
 							
 							Stream.VorbisEncoder = new OggVorbisEncoder(SampleRate,Channels,Quality);
 						}
@@ -455,7 +454,7 @@ header:after, #MicRecorder:after
 						Stream.VorbisEncoder.oggBuffers.shift();
 					}
 					
-					if ( Encoding == Encoding_Pcm8 )
+					if ( Encoding[0] == Encoding_Pcm8 )
 					{
 						var BufferSize = Data.length;
 						var Buffer = new Uint8Array( BufferSize );
@@ -466,7 +465,7 @@ header:after, #MicRecorder:after
 						}
 					}
 					
-					if ( Encoding == Encoding_Pcm16 )
+					if ( Encoding[0] == Encoding_Pcm16 )
 					{
 						var BufferSize = 2 * Data.length;
 						var Buffer = new Uint8Array( BufferSize );
@@ -481,7 +480,7 @@ header:after, #MicRecorder:after
 					//	encode to base64
 					if ( EncodeBase64 )
 					{
-						Encoding = "Base64/" + Encoding;
+						Encoding.unshift("Base64");
 						var Buffer64 = btoa( Buffer );
 						Buffer = Buffer64;
 					}
