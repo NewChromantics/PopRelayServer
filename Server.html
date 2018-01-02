@@ -98,16 +98,17 @@ header:after, #MicRecorder:after
 	display:	block;
 }
 
-#MicRecorder canvas, #MicRecorder h2, #MicRecorder div
+#MicRecorder canvas, #MicRecorder > div
 {
-	float:			left;
+	float:		left;
+	margin:		0.5em;
 }
 
 #MicRecorder canvas
 {
 	display:	none;
 	height:		10em;
-	width:		50%;
+	width:		60%;
 	background:	green;
 }
 
@@ -135,13 +136,11 @@ header:after, #MicRecorder:after
 	
 	
 		<div id=MicRecorder>
-			<h2>Mic Recorder</h2>
 			<div>
-			<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas') />
-			<input type=button value="Stop Mic" onclick=StopMicRecording('Microphone') />
+				<h2>Mic Recorder</h2>
+				<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas','MicRecorder') />
 			</div>
 			<canvas id=MicrophoneCanvas />
-			</div>
 		</div>
 
 		<div id=LastTextMessage></div>
@@ -265,14 +264,81 @@ header:after, #MicRecorder:after
 				$FpsMeta.ImageKbCount += $SourceKb;
 			}
 
+			function CreateStreamDiv(ParentDiv)
+			{
+				ParentDiv = GetElement( ParentDiv );
+				
+				var StreamDiv = document.createElement('div');
+				ParentDiv.appendChild( StreamDiv );
 
+				StreamDiv.PacketCount = 0;
+				StreamDiv.ByteCount = 0;
+				StreamDiv.LapTime = GetTimeMs();
+				
+				StreamDiv.FpsSpan = document.createElement('div');
+				StreamDiv.appendChild( StreamDiv.FpsSpan );
+				StreamDiv.FpsSpan.innerText = 'X fp/s';
+				
+				StreamDiv.KbsSpan = document.createElement('div');
+				StreamDiv.appendChild( StreamDiv.KbsSpan );
+				StreamDiv.KbsSpan.innerText = 'X kb/s';
+				
+				
+				StreamDiv.OnSend = function(ByteCount)
+				{
+					this.PacketCount++;
+					this.ByteCount += ByteCount;
+				};
+				
+				StreamDiv.Update = function()
+				{
+					var NowMs = GetTimeMs();
+					var LapDurationMs = NowMs - this.LapTime;
+					
+					//	if we update too fast we'll never get a good reading. But requestAnimationFrame is better for the browser/computer than using settimeout (maybe)
+					if ( LapDurationMs > 300 )
+					{
+						var LapDurationSecs = LapDurationMs / 1000;
+						
+						var PacketRate = this.PacketCount / LapDurationSecs;
+						this.FpsSpan.innerText = "" + PacketRate.toFixed(2) + " fps";
 
-			function TStream(Name)
+						var KbCount = this.ByteCount / 1024;
+						var KbRate = KbCount / LapDurationSecs;
+						this.KbsSpan.innerText = "" + KbRate.toFixed(2) + " kbps";
+
+						this.PacketCount = 0;
+						this.ByteCount = 0;
+
+						this.LapTime = NowMs;
+					}
+					this.UpdateTimer = window.requestAnimationFrame( function(){	StreamDiv.Update();	} );
+					//this.UpdateTimer = setTimeout( function(){	StreamDiv.Update();	}, 1000 );
+				};
+				//	start update loop
+				StreamDiv.Update();
+				
+				return StreamDiv;
+			}
+
+			function TStream(Name,Socket,ParentDiv)
 			{
 				this.Name = Name;
-				this.OnNewData = function(Blob)
+				this.StatsDiv = CreateStreamDiv( ParentDiv );
+				this.Send = function(Data,Encoding,Timecode,Meta)
 				{
+					//	encode to json object
+					var Json = {};
+					Json.Stream = this.Name;
+					Json.Timecode = Timecode;
+					if ( Meta != null )
+						Json.Meta = Meta;
+					Json.Encoding = Encoding;
+					//	if not string, send as binary tail
+					Json.Data = Data;
+					var Packet = JSON.stringify(Json);
 					
+					this.StatsDiv.OnSend( Packet.length );
 				};
 				this.OnStarted = function()
 				{
@@ -280,28 +346,51 @@ header:after, #MicRecorder:after
 				};
 			}
 
-
-
-			function StartMicRecording(StreamName,CanvasId)
+			function IsString(Variable)
 			{
-				var Canvas = document.getElementById(CanvasId);
+				return typeof Variable == 'string' || Variable instanceof String;
+			}
+		
+			function GetElement(Element)
+			{
+				//	fetch element by id if string
+				if ( IsString(Element) )
+					return document.getElementById(Element);
+				
+				return Element;
+			}
+
+			function StartMicRecording(StreamName,Canvas,StreamDiv)
+			{
+				var TargetSocket = ServerSocket;
+				var Canvas = GetElement(Canvas);
+				var StreamDiv = GetElement(StreamDiv);
 				var Constraints = {
 					audio: true
 				};
 				
+				var SampleToUnsignedInt = function(Sample,Range)
+				{
+					var SampleMax = 1;
+					Sample = Sample / SampleMax;
+					Sample = Math.min( 1, Math.max( -1, Sample ) );
+					Sample = ( (Sample + 1) / 2 ) * Range;
+					
+					return Sample;
+				};
 				
 				var DrawData = function(Data)
 				{
 					//	show
 					Canvas.style.display = 'block';
-					var Context = Canvas.getContext("2d");
+					var Context = Canvas.getContext('2d');
 					var Width = Canvas.width;
 					var Height = Canvas.height;
 					var HalfHeight = Height / 2;
 					var HalfWidth = Width / 2;
 					
 					//	clear
-					Context.fillStyle = "#000000";
+					Context.fillStyle = '#000000';
 					Context.fillRect(0,0,Width,Height);
 					
 					//	draw lines
@@ -317,18 +406,16 @@ header:after, #MicRecorder:after
 					for ( var x=0;	x<Data.length;	x++ )
 					{
 						var Sample = Data[x];
-						var SampleMax = 1.0;
-						Sample = Math.min( SampleMax, Math.max( -SampleMax, Sample ) );
+						var y = SampleToUnsignedInt( Sample, Height );
 						var LineThickness = 5;
-						var y = HalfHeight + ( Sample * HalfHeight );
-					
+						
 						Context.moveTo( x, y-LineThickness );
 						Context.lineTo( x, y+LineThickness );
 					}
 					Context.stroke()
 				};
 				
-				var OnData = function(Stream,Timecode,Data)
+				var OnData = function(Stream,Timecode,Data,Meta)
 				{
 					DrawData(Data);
 					
@@ -337,8 +424,18 @@ header:after, #MicRecorder:after
 					
 					var Timecode = Timecode - Stream.FirstTimecode;
 					
-					//console.log("Stream " + Stream.Name + " data...");
-					//console.log(Data);
+					//	convert to u16, encode & send
+					var Encoding = "Base64/PcmU16";
+					var BufferSize = 2 * Data.length;
+					var Buffer = new ArrayBuffer( BufferSize );
+					for ( var i=0;	i<Data.length;	i++ )
+					{
+						var Sample16 = SampleToUnsignedInt( Data[i], (1<<16)-1 );
+						Buffer[ (i*2) + 0 ] = Sample16 >> 8;
+						Buffer[ (i*2) + 1 ] = Sample16 & 0xff;
+					}
+					var Buffer64 = btoa( Buffer );
+					Stream.Send( Buffer64, Encoding, Timecode, Meta );
 				};
 				
 				
@@ -350,83 +447,44 @@ header:after, #MicRecorder:after
 				
 				var CreateAudioSink = function(MediaStream)
 				{
-					var Stream = new TStream(StreamName);
+					var Stream = new TStream(StreamName,TargetSocket,StreamDiv);
 					
 					var Channels = 2;
 					var SampleRate = 44100;
 					var BufferSecs = 3;
 					var Size = SampleRate * BufferSecs;
 					
-					
-					//	gr: analyser doesn't run with offline context
+					//	gr: doesn't run with offline context (I need to start it?)
 					//var Context = new OfflineAudioContext( Channels, Size, SampleRate );
 					var Context = new AudioContext();
 					var AudioSource = Context.createMediaStreamSource(MediaStream);
 					
-					var DataAsFloat = false;
-					var UseAnalyser = false;
-					
-					
-					if ( UseAnalyser )
+					var ChannelsIn = 2;
+					var ChannelsOut = 1;
+					var BufferSize = 512;
+					var Processor = Context.createScriptProcessor( BufferSize, ChannelsIn, ChannelsOut );
+					var HandleData = function(AudioDataEvent)
 					{
-						var AnalyserNode = Context.createAnalyser();
-						AnalyserNode.fftSize = 2048;
+						var Channels = AudioDataEvent.inputBuffer.numberOfChannel;
+						var Channel = 0;
+						var InputData = AudioDataEvent.inputBuffer.getChannelData( Channel );
+						//var Timecode = AudioDataEvent.timeStamp;
+						var Timecode = AudioDataEvent.playbackTime;
 						
-						if ( DataAsFloat )
-							var DataBuffer = new Float32Array(AnalyserNode.frequencyBinCount);
-						else
-							var DataBuffer = new Uint8Array(AnalyserNode.frequencyBinCount);
-						
-						
-						AudioSource.connect( AnalyserNode );
-					}
-					else
-					{
-						var ChannelsIn = 2;
-						var ChannelsOut = 1;
-						var BufferSize = 512;
-						var Processor = Context.createScriptProcessor( BufferSize, ChannelsIn, ChannelsOut );
-						var HandleData = function(AudioDataEvent)
-						{
-							var Channels = AudioDataEvent.inputBuffer.numberOfChannel;
-							var Channel = 0;
-							var InputData = AudioDataEvent.inputBuffer.getChannelData( Channel );
-							//var Timecode = AudioDataEvent.timeStamp;
-							var Timecode = AudioDataEvent.playbackTime;
-							
-							OnData( Stream, Timecode, InputData );
-							//console.log(AudioDataEvent);
-						};
-						Processor.onaudioprocess = HandleData;
-						
-						AudioSource.connect( Processor );
-						Processor.connect( Context.destination );
-					}
+						OnData( Stream, Timecode, InputData );
+						//console.log(AudioDataEvent);
+					};
+					Processor.onaudioprocess = HandleData;
 					
-
-					var UpdateLoop = function()
-					{
-						if ( UseAnalyser )
-						{
-							console.log("Update loop");
-							
-							if ( DataAsFloat )
-								AnalyserNode.getFloatFrequencyData(DataBuffer);
-							else
-								AnalyserNode.getByteFrequencyData(DataBuffer);
-							console.log(DataBuffer);
-						}
-						
-						Stream.Timer = setTimeout( UpdateLoop, 2000 );
-					}
-					UpdateLoop();
+					AudioSource.connect( Processor );
+					Processor.connect( Context.destination );
 					
 				}
 				
 				var CreateRecorder = function(MediaStream)
 				{
 					var TimesliceInterval = 5000;
-					var Stream = new TStream(StreamName);
+					var Stream = new TStream(StreamName,TargetSocket);
 					Stream.MediaStream = MediaStream;
 					Stream.Recorder = new MediaRecorder(MediaStream);
 					Stream.Recorder.ondataavailable = function(DataEvent)	{	OnData( Stream, DataEvent );	};
@@ -449,7 +507,6 @@ header:after, #MicRecorder:after
 					console.log("Got user medias");
 					console.log(MediaStream);
 					CreateAudioSink( MediaStream );
-					//CreateRecorder( MediaStream );
 				};
 				
 				navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess).catch(OnError);
