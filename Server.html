@@ -77,7 +77,7 @@ Input
 	background-color:	#bfb;
 }
 
-.MessageBox, #LastTextMessage, #LastErrorMessage, #TextFrameRate, #LastImageBox
+.MessageBox, #LastTextMessage, #LastErrorMessage, #TextFrameRate, #LastImageBox, #MicRecorder
 {
 	margin:		10px;
 	padding:	10px;
@@ -91,11 +91,24 @@ header div, header h1
 	float:	left;
 }
 
-header:after
+header:after, #MicRecorder:after
 {
 	clear:		both;
 	content:	"";
 	display:	block;
+}
+
+#MicRecorder canvas, #MicRecorder h2, #MicRecorder div
+{
+	float:			left;
+}
+
+#MicRecorder canvas
+{
+	display:	none;
+	height:		10em;
+	width:		50%;
+	background:	green;
 }
 
 </style>
@@ -119,6 +132,17 @@ header:after
 		</div>
 		
 	</header>
+	
+	
+		<div id=MicRecorder>
+			<h2>Mic Recorder</h2>
+			<div>
+			<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas') />
+			<input type=button value="Stop Mic" onclick=StopMicRecording('Microphone') />
+			</div>
+			<canvas id=MicrophoneCanvas />
+			</div>
+		</div>
 
 		<div id=LastTextMessage></div>
 		<div id=TextFrameRate>X fps</div>
@@ -241,6 +265,195 @@ header:after
 				$FpsMeta.ImageKbCount += $SourceKb;
 			}
 
+
+
+			function TStream(Name)
+			{
+				this.Name = Name;
+				this.OnNewData = function(Blob)
+				{
+					
+				};
+				this.OnStarted = function()
+				{
+					LogMessage("Stream " + this.Name + " started");
+				};
+			}
+
+
+
+			function StartMicRecording(StreamName,CanvasId)
+			{
+				var Canvas = document.getElementById(CanvasId);
+				var Constraints = {
+					audio: true
+				};
+				
+				
+				var DrawData = function(Data)
+				{
+					//	show
+					Canvas.style.display = 'block';
+					var Context = Canvas.getContext("2d");
+					var Width = Canvas.width;
+					var Height = Canvas.height;
+					var HalfHeight = Height / 2;
+					var HalfWidth = Width / 2;
+					
+					//	clear
+					Context.fillStyle = "#000000";
+					Context.fillRect(0,0,Width,Height);
+					
+					//	draw lines
+					Context.beginPath();
+					var Gradient = Context.createLinearGradient( HalfWidth,0,HalfWidth,Height);
+					Gradient.addColorStop(0/5, '#FF0000');
+					Gradient.addColorStop(1/5, '#FFff00');
+					Gradient.addColorStop(2/5, '#00ff00');
+					Gradient.addColorStop(3/5, '#ffff00');
+					Gradient.addColorStop(4/5, '#ff0000');
+					Context.lineWidth = 1;
+					Context.strokeStyle = Gradient;
+					for ( var x=0;	x<Data.length;	x++ )
+					{
+						var Sample = Data[x];
+						var SampleMax = 1.0;
+						Sample = Math.min( SampleMax, Math.max( -SampleMax, Sample ) );
+						var LineThickness = 5;
+						var y = HalfHeight + ( Sample * HalfHeight );
+					
+						Context.moveTo( x, y-LineThickness );
+						Context.lineTo( x, y+LineThickness );
+					}
+					Context.stroke()
+				};
+				
+				var OnData = function(Stream,Timecode,Data)
+				{
+					DrawData(Data);
+					
+					if ( Stream.FirstTimecode == null )
+						Stream.FirstTimecode = Timecode;
+					
+					var Timecode = Timecode - Stream.FirstTimecode;
+					
+					//console.log("Stream " + Stream.Name + " data...");
+					//console.log(Data);
+				};
+				
+				
+				var OnError = function(Error)
+				{
+					LogMessage("Error capturing user media: " + Error.name + " (" + Error.message + ")" );
+					console.log(Error);
+				};
+				
+				var CreateAudioSink = function(MediaStream)
+				{
+					var Stream = new TStream(StreamName);
+					
+					var Channels = 2;
+					var SampleRate = 44100;
+					var BufferSecs = 3;
+					var Size = SampleRate * BufferSecs;
+					
+					
+					//	gr: analyser doesn't run with offline context
+					//var Context = new OfflineAudioContext( Channels, Size, SampleRate );
+					var Context = new AudioContext();
+					var AudioSource = Context.createMediaStreamSource(MediaStream);
+					
+					var DataAsFloat = false;
+					var UseAnalyser = false;
+					
+					
+					if ( UseAnalyser )
+					{
+						var AnalyserNode = Context.createAnalyser();
+						AnalyserNode.fftSize = 2048;
+						
+						if ( DataAsFloat )
+							var DataBuffer = new Float32Array(AnalyserNode.frequencyBinCount);
+						else
+							var DataBuffer = new Uint8Array(AnalyserNode.frequencyBinCount);
+						
+						
+						AudioSource.connect( AnalyserNode );
+					}
+					else
+					{
+						var ChannelsIn = 2;
+						var ChannelsOut = 1;
+						var BufferSize = 512;
+						var Processor = Context.createScriptProcessor( BufferSize, ChannelsIn, ChannelsOut );
+						var HandleData = function(AudioDataEvent)
+						{
+							var Channels = AudioDataEvent.inputBuffer.numberOfChannel;
+							var Channel = 0;
+							var InputData = AudioDataEvent.inputBuffer.getChannelData( Channel );
+							//var Timecode = AudioDataEvent.timeStamp;
+							var Timecode = AudioDataEvent.playbackTime;
+							
+							OnData( Stream, Timecode, InputData );
+							//console.log(AudioDataEvent);
+						};
+						Processor.onaudioprocess = HandleData;
+						
+						AudioSource.connect( Processor );
+						Processor.connect( Context.destination );
+					}
+					
+
+					var UpdateLoop = function()
+					{
+						if ( UseAnalyser )
+						{
+							console.log("Update loop");
+							
+							if ( DataAsFloat )
+								AnalyserNode.getFloatFrequencyData(DataBuffer);
+							else
+								AnalyserNode.getByteFrequencyData(DataBuffer);
+							console.log(DataBuffer);
+						}
+						
+						Stream.Timer = setTimeout( UpdateLoop, 2000 );
+					}
+					UpdateLoop();
+					
+				}
+				
+				var CreateRecorder = function(MediaStream)
+				{
+					var TimesliceInterval = 5000;
+					var Stream = new TStream(StreamName);
+					Stream.MediaStream = MediaStream;
+					Stream.Recorder = new MediaRecorder(MediaStream);
+					Stream.Recorder.ondataavailable = function(DataEvent)	{	OnData( Stream, DataEvent );	};
+					Stream.FirstTimecode = null;
+					Stream.Recorder.start(TimesliceInterval);
+					Stream.OnStarted();
+					
+					//	grab data regularly
+					var UpdateLoop = function()
+					{
+						console.log("Update loop");
+						Stream.Recorder.requestData();
+						Stream.Recorder.Timer = setTimeout( UpdateLoop, TimesliceInterval );
+					}
+					UpdateLoop();
+				}
+				
+				var OnSuccess = function(MediaStream)
+				{
+					console.log("Got user medias");
+					console.log(MediaStream);
+					CreateAudioSink( MediaStream );
+					//CreateRecorder( MediaStream );
+				};
+				
+				navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess).catch(OnError);
+			}
 						
 
 			function OnTextMessage($Socket,$MessageString)
