@@ -3,6 +3,8 @@
 <head>
 <title>PopRelayServer Test</title>
 <link rel="stylesheet" type="text/css" href="http://panopo.ly/panopoly.css">
+<script src="libvorbis/js/libvorbis.min.js"></script>
+<script src="oggvorbisencoderjs/lib/OggVorbisEncoder.js"></script>
 <style type=text/css>
 
 body
@@ -330,14 +332,14 @@ header:after, #MicRecorder:after
 					//	encode to json object
 					var Json = {};
 					Json.Stream = this.Name;
-					Json.Timecode = Timecode;
+					Json.Timecode = Timecode.toFixed(0);
 					if ( Meta != null )
 						Json.Meta = Meta;
 					Json.Encoding = Encoding;
 					//	if not string, send as binary tail
 					Json.Data = Data;
 					var Packet = JSON.stringify(Json);
-					
+					Socket.SendMessage( Packet );
 					this.StatsDiv.OnSend( Packet.length );
 				};
 				this.OnStarted = function()
@@ -425,17 +427,67 @@ header:after, #MicRecorder:after
 					var Timecode = Timecode - Stream.FirstTimecode;
 					
 					//	convert to u16, encode & send
-					var Encoding = "Base64/PcmU16";
-					var BufferSize = 2 * Data.length;
-					var Buffer = new ArrayBuffer( BufferSize );
-					for ( var i=0;	i<Data.length;	i++ )
+					var Encoding_Pcm8 = 'Pcm8';
+					var Encoding_Pcm16 = 'Pcm16';
+					var Encoding_Vorbis = 'Vorbis';
+					
+					var Encoding = Encoding_Vorbis;
+					var EncodeBase64 = true;
+					
+					if ( Encoding == Encoding_Vorbis )
 					{
-						var Sample16 = SampleToUnsignedInt( Data[i], (1<<16)-1 );
-						Buffer[ (i*2) + 0 ] = Sample16 >> 8;
-						Buffer[ (i*2) + 1 ] = Sample16 & 0xff;
+						if ( Stream.VorbisEncoder === undefined )
+						{
+							var SampleRate = 44100;
+							var Channels = 1;
+							var Quality = 0.3;
+							
+							Stream.VorbisEncoder = new OggVorbisEncoder(SampleRate,Channels,Quality);
+						}
+						var DataArray = [ Data ];
+						Stream.VorbisEncoder.encode( DataArray );
+						
+						//	pop next vorbis buffer
+						if ( Stream.VorbisEncoder.oggBuffers.length == 0 )
+							return;
+							
+						var Buffer = Stream.VorbisEncoder.oggBuffers[0];
+						Stream.VorbisEncoder.oggBuffers.shift();
 					}
-					var Buffer64 = btoa( Buffer );
-					Stream.Send( Buffer64, Encoding, Timecode, Meta );
+					
+					if ( Encoding == Encoding_Pcm8 )
+					{
+						var BufferSize = Data.length;
+						var Buffer = new Uint8Array( BufferSize );
+						for ( var i=0;	i<Data.length;	i++ )
+						{
+							var Sample8 = SampleToUnsignedInt( Data[i], (1<<8)-1 );
+							Buffer[ (i*1) + 1 ] = Sample8 & 0xff;
+						}
+					}
+					
+					if ( Encoding == Encoding_Pcm16 )
+					{
+						var BufferSize = 2 * Data.length;
+						var Buffer = new Uint8Array( BufferSize );
+						for ( var i=0;	i<Data.length;	i++ )
+						{
+							var Sample16 = SampleToUnsignedInt( Data[i], (1<<16)-1 );
+							Buffer[ (i*2) + 0 ] = Sample16 >> 8;
+							Buffer[ (i*2) + 1 ] = Sample16 & 0xff;
+						}
+					}
+					
+					//	encode to base64
+					if ( EncodeBase64 )
+					{
+						Encoding = "Base64/" + Encoding;
+						var Buffer64 = btoa( Buffer );
+						Buffer = Buffer64;
+					}
+					
+					
+					Stream.Send( Buffer, Encoding, Timecode, Meta );
 				};
 				
 				
@@ -461,7 +513,7 @@ header:after, #MicRecorder:after
 					
 					var ChannelsIn = 2;
 					var ChannelsOut = 1;
-					var BufferSize = 512;
+					var BufferSize = 2048;
 					var Processor = Context.createScriptProcessor( BufferSize, ChannelsIn, ChannelsOut );
 					var HandleData = function(AudioDataEvent)
 					{
@@ -469,7 +521,7 @@ header:after, #MicRecorder:after
 						var Channel = 0;
 						var InputData = AudioDataEvent.inputBuffer.getChannelData( Channel );
 						//var Timecode = AudioDataEvent.timeStamp;
-						var Timecode = AudioDataEvent.playbackTime;
+						var Timecode = AudioDataEvent.playbackTime * 1000;
 						
 						OnData( Stream, Timecode, InputData );
 						//console.log(AudioDataEvent);

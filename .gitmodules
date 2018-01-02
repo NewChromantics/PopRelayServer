@@ -1,0 +1,3 @@
+[submodule "oggvorbisencoderjs"]
+	path = oggvorbisencoderjs
+	url = https://github.com/higuma/ogg-vorbis-encoder-js.git
