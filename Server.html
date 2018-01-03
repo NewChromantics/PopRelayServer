@@ -321,12 +321,26 @@ header:after, #MicRecorder:after
 				
 				return StreamDiv;
 			}
-
+		
+			//	https://stackoverflow.com/a/30836196/355753
+			function InsertStringIntoArray(str,Buffer)
+			{
+				for (var i = 0; i < str.length; ++i)
+				{
+					var charCode = str.charCodeAt(i);
+					if (charCode > 0xFF)  // char > 1 byte since charCodeAt returns the UTF-16 value
+					{
+						throw new Error('Character ' + String.fromCharCode(charCode) + ' can\'t be represented by a US-ASCII byte.');
+					}
+					Buffer[i] = charCode;
+				}
+			}
+		
 			function TStream(Name,Socket,ParentDiv)
 			{
 				this.Name = Name;
 				this.StatsDiv = CreateStreamDiv( ParentDiv );
-				this.Send = function(Data,Encoding,Timecode,Meta)
+				this.Send = function(Data,Encoding,Timecode,Keyframe,Meta)
 				{
 					//	encode to json object
 					var Json = {};
@@ -334,12 +348,25 @@ header:after, #MicRecorder:after
 					Json.Timecode = Timecode.toFixed(0);
 					if ( Meta != null )
 						Json.Meta = Meta;
+					Json.Keyframe = Keyframe;
 					Json.Encoding = Encoding;
-					//	if not string, send as binary tail
-					Json.Data = Data;
-					var Packet = JSON.stringify(Json);
+					
+					if ( IsString(Data) )
+					{
+						Json.Data = Data;
+						var Packet = JSON.stringify(Json);
+						var PacketLength = Packet.length;
+					}
+					else
+					{
+						var JsonString = JSON.stringify(Json);
+						var PacketLength = Data.length + JsonString.length;
+						var Packet = new Uint8Array( PacketLength );
+						InsertStringIntoArray( JsonString, Packet );
+						Packet.set( Data, JsonString.length );
+					}
 					Socket.SendMessage( Packet );
-					this.StatsDiv.OnSend( Packet.length );
+					this.StatsDiv.OnSend( PacketLength );
 				};
 				this.OnStarted = function()
 				{
@@ -376,7 +403,6 @@ header:after, #MicRecorder:after
 					Sample = Sample / SampleMax;
 					Sample = Math.min( 1, Math.max( -1, Sample ) );
 					Sample = ( (Sample + 1) / 2 ) * Range;
-					
 					return Sample;
 				};
 				
@@ -430,8 +456,10 @@ header:after, #MicRecorder:after
 					var Encoding_Pcm16 = 'Pcm16';
 					var Encoding_Vorbis = 'Vorbis';
 					
-					var Encoding = [ Encoding_Vorbis ];
-					var EncodeBase64 = true;
+					var Encoding = [ Encoding_Pcm8 ];
+					var Keyframe = false;
+					var EncodeBase64 = false;
+					var EncodeHex = false;
 					
 					if ( Encoding[0] == Encoding_Vorbis )
 					{
@@ -442,6 +470,7 @@ header:after, #MicRecorder:after
 							var Quality = 0.5;
 							
 							Stream.VorbisEncoder = new OggVorbisEncoder(SampleRate,Channels,Quality);
+							Stream.FirstFrame = true;
 						}
 						var DataArray = [ Data ];
 						Stream.VorbisEncoder.encode( DataArray );
@@ -452,6 +481,9 @@ header:after, #MicRecorder:after
 							
 						var Buffer = Stream.VorbisEncoder.oggBuffers[0];
 						Stream.VorbisEncoder.oggBuffers.shift();
+						if ( Stream.FirstFrame )
+							Keyframe = true;
+						Stream.FirstFrame = false;
 					}
 					
 					if ( Encoding[0] == Encoding_Pcm8 )
@@ -460,9 +492,11 @@ header:after, #MicRecorder:after
 						var Buffer = new Uint8Array( BufferSize );
 						for ( var i=0;	i<Data.length;	i++ )
 						{
-							var Sample8 = SampleToUnsignedInt( Data[i], (1<<8)-1 );
-							Buffer[ (i*1) + 1 ] = Sample8 & 0xff;
+							var Sample8 = SampleToUnsignedInt( Data[i], 255 );
+							//Buffer[i] = Sample8 & 0xff;
+							Buffer[i] = Sample8;
 						}
+						//console.log(Buffer);
 					}
 					
 					if ( Encoding[0] == Encoding_Pcm16 )
@@ -485,8 +519,25 @@ header:after, #MicRecorder:after
 						Buffer = Buffer64;
 					}
 					
+					if ( EncodeHex )
+					{
+						var hexChar = ["0", "1", "2", "3", "4", "5", "6", "7","8", "9", "A", "B", "C", "D", "E", "F"];
+						function hex(b)
+						{
+							if ( b < 0 || b > 255 )
+								throw "Byte " + b + " out of range for hex conversion";
+							return hexChar[(b >> 4) & 0x0f] + hexChar[b & 0x0f];
+						}
+						
+						Encoding.unshift("Hex");
+						var BufferHex = "";
+						for ( var i=0;	i<Buffer.length;	i++ )
+							BufferHex += hex(Buffer[i]);
+						Buffer = BufferHex;
+					}
 					
-					Stream.Send( Buffer, Encoding, Timecode, Meta );
+					
+					Stream.Send( Buffer, Encoding, Timecode, Keyframe, Meta );
 				};
 				
 				
@@ -500,15 +551,14 @@ header:after, #MicRecorder:after
 				{
 					var Stream = new TStream(StreamName,TargetSocket,StreamDiv);
 					
-					var Channels = 2;
-					var SampleRate = 44100;
-					var BufferSecs = 3;
-					var Size = SampleRate * BufferSecs;
 					
 					//	gr: doesn't run with offline context (I need to start it?)
 					//var Context = new OfflineAudioContext( Channels, Size, SampleRate );
 					var Context = new AudioContext();
 					var AudioSource = Context.createMediaStreamSource(MediaStream);
+					
+					var Meta = {};
+					Meta.SampleRate = Context;
 					
 					var ChannelsIn = 2;
 					var ChannelsOut = 1;
@@ -522,7 +572,7 @@ header:after, #MicRecorder:after
 						//var Timecode = AudioDataEvent.timeStamp;
 						var Timecode = AudioDataEvent.playbackTime * 1000;
 						
-						OnData( Stream, Timecode, InputData );
+						OnData( Stream, Timecode, InputData, Meta );
 						//console.log(AudioDataEvent);
 					};
 					Processor.onaudioprocess = HandleData;

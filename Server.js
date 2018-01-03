@@ -269,7 +269,7 @@ var OnServerWebsocketConnection = function(request)
 		if (message.type === 'utf8') 
 		{
 			var $Message = message.utf8Data;
-			console.log('Received Message: ' + $Message);
+			//console.log('Received Message: ' + $Message);
 			Relay( connection, function(target) { target.sendUTF($Message); } );
 		}
 		else if (message.type === 'binary') 
@@ -336,8 +336,13 @@ BroadcastSocket.on('message', function (msg, info)
 	console.log(msg.toString());
 	if(msg.toString() == 'whoisserver')
 	{
-		//console.log("SENDING");
 		var udpResponse = LocalIP+':'+ServerPort;
+		BroadcastSocket.send(udpResponse, 0, udpResponse.length, info.port, info.address );
+	}
+	
+	if(msg.toString() == 'whereisobserverserver')
+	{
+		var udpResponse = LocalIP+':'+ClientPort;
 		BroadcastSocket.send(udpResponse, 0, udpResponse.length, info.port, info.address );
 	}
 });
