@@ -346,8 +346,17 @@ header:after, #MicRecorder:after
 					var Json = {};
 					Json.Stream = this.Name;
 					Json.Timecode = Timecode.toFixed(0);
+					
+					//	append meta directly
 					if ( Meta != null )
-						Json.Meta = Meta;
+					{
+						var AddKeyValue = function(Key)
+						{
+							Json[Key] = Meta[Key];
+						};
+						Object.keys(Meta).forEach(AddKeyValue);
+					}
+					
 					Json.Keyframe = Keyframe;
 					Json.Encoding = Encoding;
 					
@@ -403,7 +412,7 @@ header:after, #MicRecorder:after
 					Sample = Sample / SampleMax;
 					Sample = Math.min( 1, Math.max( -1, Sample ) );
 					Sample = ( (Sample + 1) / 2 ) * Range;
-					return Sample;
+					return Math.round(Sample);
 				};
 				
 				var DrawData = function(Data)
@@ -456,7 +465,7 @@ header:after, #MicRecorder:after
 					var Encoding_Pcm16 = 'Pcm16';
 					var Encoding_Vorbis = 'Vorbis';
 					
-					var Encoding = [ Encoding_Pcm8 ];
+					var Encoding = [ Encoding_Vorbis ];
 					var Keyframe = false;
 					var EncodeBase64 = false;
 					var EncodeHex = false;
@@ -490,6 +499,7 @@ header:after, #MicRecorder:after
 					{
 						var BufferSize = Data.length;
 						var Buffer = new Uint8Array( BufferSize );
+						
 						for ( var i=0;	i<Data.length;	i++ )
 						{
 							var Sample8 = SampleToUnsignedInt( Data[i], 255 );
