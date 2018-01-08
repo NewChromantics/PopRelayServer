@@ -338,6 +338,7 @@ header:after, #MicRecorder:after
 		
 			function TStream(Name,Socket,ParentDiv)
 			{
+				this.EncodingSeperator = '/';
 				this.Name = Name;
 				this.StatsDiv = CreateStreamDiv( ParentDiv );
 				this.Send = function(Data,Encoding,Timecode,Keyframe,Meta)
@@ -358,7 +359,9 @@ header:after, #MicRecorder:after
 					}
 					
 					Json.Keyframe = Keyframe;
-					Json.Encoding = Encoding;
+					
+					//	gr: encoding is now / seperated string
+					Json.Encoding = IsString(Encoding) ? Encoding : Encoding.join(this.EncodingSeperator);
 					
 					if ( IsString(Data) )
 					{
