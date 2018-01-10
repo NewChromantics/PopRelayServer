@@ -9,9 +9,9 @@
 body
 {
 	background-color:	#fff;
-	color:			#000;
+	color:				#000;
 	font-family:		"futura-pt",sans-serif;
-	margin:			auto 10% auto 10%;
+	margin:				auto 10% auto 10%;
 }
 
 h1
@@ -23,7 +23,7 @@ h1
 	margin:				none;
 }
 
-a
+xxxa
 {
 	color:			#c30;
 	font-size:		18pt;
@@ -139,7 +139,17 @@ header:after, #MicRecorder:after
 		<div id=MicRecorder>
 			<div>
 				<h2>Mic Recorder</h2>
-				<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas','MicRecorder') />
+				<select id=MicrophoneEncoding>
+					<option value="Pcm8">Pcm8</option>
+					<option value="Pcm16">Pcm16</option>
+					<option value="OggVorbis">OggVorbis</option>
+				</select>
+				<select id=MicrophoneCompression>
+					<option value="None">None</option>
+					<option value="Base64">Base64</option>
+					<option value="Hex">Hex</option>
+				</select>
+				<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas','MicRecorder','MicrophoneEncoding','MicrophoneCompression') />
 			</div>
 			<canvas id=MicrophoneCanvas />
 		</div>
@@ -154,6 +164,29 @@ header:after, #MicRecorder:after
 		</div>
 
 		<script>
+			var Format_Pcm8 = 'Pcm8';
+			var Format_Pcm16 = 'Pcm16';
+			var Format_OggVorbis = 'OggVorbis';
+			var Format_Base64 = 'Base64';
+			var Format_Hex = 'Hex';
+			
+			function GetDataMatchPos(Data,MatchStr)
+			{
+				for (var d=0;	d<Data.length-MatchStr.length;	d++ )
+				{
+					var IsMatch = true;
+					for (var m=0;	m<MatchStr.length;	m++)
+					{
+						var b = Data[d+m];
+						var c = MatchStr.charCodeAt(m);
+						IsMatch = IsMatch && (b==c);
+					}
+					if ( IsMatch )
+					return d;
+				}
+				return -1;
+			};
+			
 			var ShowControls = function()
 			{
 				var $div = document.getElementById('ControlBox');
@@ -207,30 +240,6 @@ header:after, #MicRecorder:after
 				var d = new Date();
 				var n = d.getTime();
 				return n;
-			}
-
-			var $FpsMeta = {'LapTime':GetTimeMs(),'ImageFrameCount':0,'ImageKbCount':0,'TextFrameCount':0,'TextKbCount':0};
-
-			function UpdateFps()
-			{
-				//	time since last lap in secs
-				var NowMs = GetTimeMs();
-				var LapDurationMs = NowMs - $FpsMeta.LapTime;
-				var LapDurationSecs = LapDurationMs / 1000;
-
-				var ImageFrameRate = $FpsMeta.ImageFrameCount * LapDurationSecs;
-				var ImageKbRate = $FpsMeta.ImageKbCount * LapDurationSecs;
-				var TextFrameRate = $FpsMeta.TextFrameCount * LapDurationSecs;
-				var TextKbRate = $FpsMeta.TextKbCount * LapDurationSecs;
-				
-				UpdateImageFpsMessage( "" + ImageFrameRate.toFixed(2) + " fps, " + ImageKbRate.toFixed(2) + " kb/sec" );
-				UpdateTextFpsMessage( "" + TextFrameRate.toFixed(2) + " fps, " + TextKbRate.toFixed(2) + " kb/sec" );
-
-				$FpsMeta.ImageFrameCount = 0;
-				$FpsMeta.ImageKbCount = 0;
-				$FpsMeta.TextFrameCount = 0;
-				$FpsMeta.TextKbCount = 0;
-				$FpsMeta.LapTime = NowMs;
 			}
 
 			function UpdateMessage($MessageString)
@@ -399,9 +408,21 @@ header:after, #MicRecorder:after
 				
 				return Element;
 			}
-
-			function StartMicRecording(StreamName,Canvas,StreamDiv)
+		
+			function GetElementValue(Element)
 			{
+				var Element = GetElement(Element);
+				console.log(Element);
+				return Element.value;
+			}
+
+var OggStartEncodingTime = null;
+
+			function StartMicRecording(StreamName,Canvas,StreamDiv,Encoding,Compression)
+			{
+				Encoding = GetElementValue(Encoding);
+				Compression = GetElementValue(Compression);
+				
 				var TargetSocket = ServerSocket;
 				var Canvas = GetElement(Canvas);
 				var StreamDiv = GetElement(StreamDiv);
@@ -464,16 +485,12 @@ header:after, #MicRecorder:after
 					var Timecode = Timecode - Stream.FirstTimecode;
 					
 					//	convert to u16, encode & send
-					var Encoding_Pcm8 = 'Pcm8';
-					var Encoding_Pcm16 = 'Pcm16';
-					var Encoding_Vorbis = 'Vorbis';
 					
-					var Encoding = [ Encoding_Vorbis ];
+					
+					var Encodings = [];
 					var Keyframe = false;
-					var EncodeBase64 = false;
-					var EncodeHex = false;
 					
-					if ( Encoding[0] == Encoding_Vorbis )
+					if ( Encoding == Format_OggVorbis )
 					{
 						if ( Stream.VorbisEncoder === undefined )
 						{
@@ -482,27 +499,122 @@ header:after, #MicRecorder:after
 							var Quality = 0.5;
 							
 							Stream.VorbisEncoder = new OggVorbisEncoder(SampleRate,Channels,Quality);
-							Stream.FirstFrame = true;
+							OggStartEncodingTime = GetTimeMs();
+							Stream.FrameCount = 0;
 						}
 						var DataArray = [ Data ];
 						Stream.VorbisEncoder.encode( DataArray );
 						
+						if ( Stream.FrameCount == 0 )
+						{
+							//	first packet isn't valid until it has the vorbis header, which is a few packets in...
+							//	but gotta work out whenthe whole stream is valid
+							if ( Stream.VorbisEncoder.oggBuffers.length == 0 )
+								return;
+							var FirstBuffer = Stream.VorbisEncoder.oggBuffers[0];
+							var VorbisHeaderPos = GetDataMatchPos( FirstBuffer, "vorbis" );
+							if ( VorbisHeaderPos == -1 )
+							{
+								console.log("No ogg packets(" + Stream.VorbisEncoder.oggBuffers.length + ") with vorbis header yet");
+								return;
+							}
+						}
+						
 						//	pop next vorbis buffer
 						if ( Stream.VorbisEncoder.oggBuffers.length == 0 )
 							return;
+						
+						var BufferWholeFiles = 0.5;
+						//BufferWholeFiles = false;
+						var MinBufferBuffer = 3;
+						
+						if ( BufferWholeFiles !== false )
+						{
+							var MinDurationMs = BufferWholeFiles * 1000;
+							var Duration = GetTimeMs() - OggStartEncodingTime;
+							if ( Duration < MinDurationMs )
+								return;
 							
-						var Buffer = Stream.VorbisEncoder.oggBuffers[0];
-						Stream.VorbisEncoder.oggBuffers.shift();
-						if ( Stream.FirstFrame )
+							if ( Stream.VorbisEncoder.oggBuffers.length < MinBufferBuffer )
+								return;
+							
+							//	merge data together (without finish!)
+							var JoinArrays = function(a,b)
+							{
+								var tmp = new Uint8Array(a.byteLength + b.byteLength);
+								tmp.set(a, 0);
+								tmp.set(b, a.byteLength);
+								return tmp;
+							};
+							
+							//	encode an empty buffer to finish() without flushing data
+							var DataArray = [ new Float32Array(0) ];
+							Stream.VorbisEncoder.encode( DataArray );
+							
+							
+							//	grab all the data as bytes
+							var Buffer = new Uint8Array(0);
+							Stream.VorbisEncoder.oggBuffers.forEach( function(x){	Buffer = JoinArrays(Buffer,x);} );
+							var OggHeaderPos = GetDataMatchPos( Buffer, "OggS" );
+							var VorbisHeaderPos = GetDataMatchPos( Buffer, "vorbis" );
+							console.log("OggBuffer x" + Buffer.length + "; OggHeaderPos=" + OggHeaderPos + " VorbisHeaderPos=" + VorbisHeaderPos );
+							
+							var ShowDownloadLink = true;
+							if ( ShowDownloadLink )
+							{
+								var blob = Stream.VorbisEncoder.finish();
+								var bloburl = URL.createObjectURL(blob);
+								var linkdiv = document.createElement('div');
+								var link = document.createElement('a');
+								link.href = bloburl;
+								link.download = "stream.ogg";
+								link.innerHTML = "Download";
+								linkdiv.appendChild(link);
+								StreamDiv.appendChild(linkdiv);
+							}
+							
+							//	reset
+							Stream.VorbisEncoder = undefined;
+						}
+						else
+						{
+							var EncodedBufferCount = Stream.VorbisEncoder.oggBuffers.length;
+							//	vorbis encoder seems to write back. we don't need to Finish() but need some leeway.
+							//	could use the vorbis header look to see if it's been written before sending
+							if ( Stream.FrameCount + MinBufferBuffer > EncodedBufferCount )
+								return;
+								
+							var Pop = true;
+							if ( Pop )
+							{
+								var Buffer = Stream.VorbisEncoder.oggBuffers[0];
+								Stream.VorbisEncoder.oggBuffers.shift();
+							}
+							else
+							{
+								console.log("reading frame " + Stream.FrameCount + "/" + Stream.VorbisEncoder.oggBuffers.length );
+								var Buffer = Stream.VorbisEncoder.oggBuffers[Stream.FrameCount];
+							}
+							Stream.FrameCount++;
+						}
+						
+						Encodings.unshift(Format_OggVorbis);
+						
+						//	verifying data is valid...
+						var OggHeaderPos = GetDataMatchPos( Buffer, "OggS" );
+						var VorbisHeaderPos = GetDataMatchPos( Buffer, "vorbis" );
+						console.log("OggBuffer x" + Buffer.length + "; OggHeaderPos=" + OggHeaderPos + " VorbisHeaderPos=" + VorbisHeaderPos );
+						
+						if ( Stream.FrameCount <= 1 )
 							Keyframe = true;
-						Stream.FirstFrame = false;
 					}
 					
-					if ( Encoding[0] == Encoding_Pcm8 )
+					if ( Encoding == Format_Pcm8 )
 					{
 						var BufferSize = Data.length;
 						var Buffer = new Uint8Array( BufferSize );
-						
+						Encodings.unshift(Format_Pcm8);
+
 						for ( var i=0;	i<Data.length;	i++ )
 						{
 							var Sample8 = SampleToUnsignedInt( Data[i], 255 );
@@ -512,10 +624,12 @@ header:after, #MicRecorder:after
 						//console.log(Buffer);
 					}
 					
-					if ( Encoding[0] == Encoding_Pcm16 )
+					if ( Encoding == Format_Pcm16 )
 					{
 						var BufferSize = 2 * Data.length;
 						var Buffer = new Uint8Array( BufferSize );
+						Encodings.unshift(Format_Pcm16);
+						
 						for ( var i=0;	i<Data.length;	i++ )
 						{
 							var Sample16 = SampleToUnsignedInt( Data[i], (1<<16)-1 );
@@ -525,14 +639,14 @@ header:after, #MicRecorder:after
 					}
 					
 					//	encode to base64
-					if ( EncodeBase64 )
+					if ( Compression == Format_Base64 )
 					{
-						Encoding.unshift("Base64");
 						var Buffer64 = btoa( Buffer );
 						Buffer = Buffer64;
+						Encoding.unshift(Format_Base64);
 					}
 					
-					if ( EncodeHex )
+					if ( Compression == Format_Hex )
 					{
 						var hexChar = ["0", "1", "2", "3", "4", "5", "6", "7","8", "9", "A", "B", "C", "D", "E", "F"];
 						function hex(b)
@@ -542,11 +656,11 @@ header:after, #MicRecorder:after
 							return hexChar[(b >> 4) & 0x0f] + hexChar[b & 0x0f];
 						}
 						
-						Encoding.unshift("Hex");
 						var BufferHex = "";
 						for ( var i=0;	i<Buffer.length;	i++ )
 							BufferHex += hex(Buffer[i]);
 						Buffer = BufferHex;
+						Encoding.unshift(Format_Hex);
 					}
 					
 					
@@ -676,8 +790,6 @@ header:after, #MicRecorder:after
 			var ServerSocket = new SoyWebSocket(null, DefaultServerHostname, document.getElementById('ServerConnectionBox'), RegisterServer, function(){} );
 			ServerSocket.mOnTextMessage = OnTextMessage;
 			ServerSocket.mOnBinaryMessage = OnBinaryMessage;
-
-			setInterval( UpdateFps, 1000 );
 
 		</script>
 
