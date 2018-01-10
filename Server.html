@@ -139,17 +139,26 @@ header:after, #MicRecorder:after
 		<div id=MicRecorder>
 			<div>
 				<h2>Mic Recorder</h2>
-				<select id=MicrophoneEncoding>
-					<option value="Pcm8">Pcm8</option>
-					<option value="Pcm16">Pcm16</option>
-					<option value="OggVorbis">OggVorbis</option>
-				</select>
-				<select id=MicrophoneCompression>
-					<option value="None">None</option>
-					<option value="Base64">Base64</option>
-					<option value="Hex">Hex</option>
-				</select>
-				<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas','MicRecorder','MicrophoneEncoding','MicrophoneCompression') />
+				
+				<div>
+					<select id=MicrophoneEncoding>
+						<option value="Pcm8">Pcm8</option>
+						<option value="Pcm16">Pcm16</option>
+						<option value="OggVorbis">OggVorbis</option>
+					</select>
+					<select id=MicrophoneCompression>
+						<option value="None">None</option>
+						<option value="Base64">Base64</option>
+						<option value="Hex">Hex</option>
+					</select>
+				</div>
+				<div>
+					<input type="checkbox" id="MicrophoneShowDownload" name="MicrophoneShowDownload" value=true>
+					<label for="MicrophoneShowDownload">Show Download</label>
+				</div>
+				<div>
+					<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas','MicRecorder','MicrophoneEncoding','MicrophoneCompression','MicrophoneShowDownload') />
+				</div>
 			</div>
 			<canvas id=MicrophoneCanvas />
 		</div>
@@ -413,12 +422,12 @@ header:after, #MicRecorder:after
 			{
 				var Element = GetElement(Element);
 				console.log(Element);
+				if ( Element.checked !== undefined )
+					return Element.checked;
 				return Element.value;
 			}
 
-var OggStartEncodingTime = null;
-
-			function StartMicRecording(StreamName,Canvas,StreamDiv,Encoding,Compression)
+			function StartMicRecording(StreamName,Canvas,StreamDiv,Encoding,Compression,ShowDownload)
 			{
 				Encoding = GetElementValue(Encoding);
 				Compression = GetElementValue(Compression);
@@ -499,7 +508,7 @@ var OggStartEncodingTime = null;
 							var Quality = 0.5;
 							
 							Stream.VorbisEncoder = new OggVorbisEncoder(SampleRate,Channels,Quality);
-							OggStartEncodingTime = GetTimeMs();
+							Stream.StartTime = GetTimeMs();
 							Stream.FrameCount = 0;
 						}
 						var DataArray = [ Data ];
@@ -531,7 +540,7 @@ var OggStartEncodingTime = null;
 						if ( BufferWholeFiles !== false )
 						{
 							var MinDurationMs = BufferWholeFiles * 1000;
-							var Duration = GetTimeMs() - OggStartEncodingTime;
+							var Duration = GetTimeMs() - Stream.StartTime;
 							if ( Duration < MinDurationMs )
 								return;
 							
@@ -559,7 +568,8 @@ var OggStartEncodingTime = null;
 							var VorbisHeaderPos = GetDataMatchPos( Buffer, "vorbis" );
 							console.log("OggBuffer x" + Buffer.length + "; OggHeaderPos=" + OggHeaderPos + " VorbisHeaderPos=" + VorbisHeaderPos );
 							
-							var ShowDownloadLink = true;
+							console.log(GetElementValue(ShowDownload));
+							var ShowDownloadLink = GetElementValue(ShowDownload);
 							if ( ShowDownloadLink )
 							{
 								var blob = Stream.VorbisEncoder.finish();
