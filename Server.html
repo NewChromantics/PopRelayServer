@@ -315,7 +315,8 @@ header:after, #MicRecorder:after
 					var LapDurationMs = NowMs - this.LapTime;
 					
 					//	if we update too fast we'll never get a good reading. But requestAnimationFrame is better for the browser/computer than using settimeout (maybe)
-					if ( LapDurationMs > 300 )
+					var HasHadDataSinceFlush = (this.PacketCount>0) || (this.ByteCount>0);
+					if ( LapDurationMs > 300 && HasHadDataSinceFlush )
 					{
 						var LapDurationSecs = LapDurationMs / 1000;
 						
@@ -584,6 +585,7 @@ header:after, #MicRecorder:after
 							}
 							
 							//	reset
+							Stream.VorbisEncoder.cleanup();
 							Stream.VorbisEncoder = undefined;
 						}
 						else
@@ -653,7 +655,7 @@ header:after, #MicRecorder:after
 					{
 						var Buffer64 = btoa( Buffer );
 						Buffer = Buffer64;
-						Encoding.unshift(Format_Base64);
+						Encodings.unshift(Format_Base64);
 					}
 					
 					if ( Compression == Format_Hex )
@@ -670,7 +672,7 @@ header:after, #MicRecorder:after
 						for ( var i=0;	i<Buffer.length;	i++ )
 							BufferHex += hex(Buffer[i]);
 						Buffer = BufferHex;
-						Encoding.unshift(Format_Hex);
+						Encodings.unshift(Format_Hex);
 					}
 					
 					
