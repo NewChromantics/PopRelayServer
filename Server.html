@@ -200,8 +200,16 @@ input[type=range]:after
 				<h2>Camera Recorder</h2>
 			</div>
 			<div>
-				<input type="text" id="WebcamStreamName" name="WebcamStreamName" value="Webcam">
+				<input type="text" id="WebcamStreamName" name="WebcamStreamName" value="Webcam" />
 				<label for="WebcamStreamName">Stream Name</label>
+			</div>
+			<div>
+				<input type="checkbox" id="UseWebcam" name="UseWebcam" value=true checked/>
+				<label for="UseWebcam">Use Web Cam</label>
+			</div>
+			<div>
+				<input type="checkbox" id="ResizeWebcamCanvas" name="ResizeWebcamCanvas" value=true xxchecked/>
+				<label for="ResizeWebcamCanvas">Resize to camera</label>
 			</div>
 			<div>
 				<select id=WebcamEncoding>
@@ -210,11 +218,15 @@ input[type=range]:after
 				</select>
 			</div>
 			<div>
+				<input type="range" id="WebcamFrameRate" name="WebcamFrameRate" min="1" max="60" value="30" oninput="this.setAttribute('value',this.value);" />
+				<label for="WebcamFrameRate">Frame Rate</label>
+			</div>
+			<div>
 				<input type="range" id="JpegQualitySlider" name="JpegQualitySlider" min="0" max="100" value="50" oninput="this.setAttribute('value',this.value);" />
 				<label for="JpegQualitySlider">Jpeg Quality</label>
 			</div>
 			<div>
-				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas','WebcamRecorder','JpegQualitySlider','WebcamEncoding') />
+				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas','WebcamRecorder','JpegQualitySlider','WebcamEncoding','UseWebcam','ResizeWebcamCanvas','WebcamFrameRate') />
 			</div>
 			<div>Launch Chrome executable with: --enable-features=WebRTC-H264WithOpenH264FFmpeg</div>
 			<canvas id=WebcamCanvas />
@@ -877,10 +889,12 @@ input[type=range]:after
 				return "hsl(" + Hue + "," + Sat + "," + Lum + ")";
 			}
 
-            function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding)
+            function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding,UseWebcam,ResizeCanvas,FrameRate)
             {
+				StreamDiv = GetElement(StreamDiv);
                 StreamName = GetElementValue(StreamName);
                 Canvas = GetElement(Canvas);
+				UseWebcam = GetElementValue(UseWebcam);
 				var TargetSocket = ServerSocket;
 				
 				var Stream = new TStream(StreamName,TargetSocket,StreamDiv);
@@ -967,20 +981,85 @@ input[type=range]:after
 						return Math.min( Height, Math.max( 0, p ) );
 					};
 					Context.fillRect( ClampX(x-Size), ClampY(y-Size),Size,Size);
-					
-					
-					OnNewFrame();
                 };
-                
-                //  read bytes of canvas and send
+				
+				
+				if ( UseWebcam )
+				{
+					//	create
+					var OnSuccess = function(Stream)
+					{
+						console.log("Got video stream");
+						console.log(Stream);
+						Stream.onended = function()	{	LogMessage("Stream Ended");	};
+
+						//	need a video element to capture to
+						var Video = document.createElement('video');
+						StreamDiv.appendChild(Video);
+						var StreamUrl = window.URL.createObjectURL(Stream);
+						Video.src = StreamUrl;
+						Video.onerror = function()	{	LogMessage("Video Error");	};
+						Video.play();
+						
+						console.log(Stream);
+						Canvas.style.display = 'block';
+						console.log("Width = " + Video.videoWidth);
+						console.log("Height = " + Video.videoHeight);
+						console.log(Video);
+						//Canvas.width = Video.videoWidth;
+						//Canvas.height = Video.videoHeight;
+						/*
+						var DrawFrame = function()
+						{
+							console.log("Draw frame");
+							Canvas.getContext('2d').drawImage(Video, 0, 0);
+						};
+						 */
+						DrawFrame = function()
+						{
+							var w = Video.videoWidth;
+							var h = Video.videoHeight;
+							if ( w > 0 && h > 0 )
+							{
+								var DoResizeCanvas = GetElementValue(ResizeCanvas);
+								if ( DoResizeCanvas )
+								{
+									//	gr: this seems to stretch the canvas but not actually resize the element...
+									Canvas.width = w;
+									Canvas.height = h;
+								}
+								//	draw centered
+								///var x = Canvas.width -
+								var x = (Canvas.width - w) / 2;
+								var y = (Canvas.height - h) / 2;
+								Canvas.getContext('2d').drawImage(Video, x, y);
+							}
+						};
+					};
+					var OnError = function()
+					{
+						LogMessage("Failed to get video user media");
+					};
+					var Constraints = { 'video':true, 'audio':false };
+					navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess);//.catch(OnError);
+				}
+
+
+				//  read bytes of canvas and send
 				var RenderLoop = function()
 				{
 					DrawFrame();
-					window.requestAnimationFrame(RenderLoop);
+					OnNewFrame();
+
+					var FrameRateSecs = GetElementValue(FrameRate);
+					var FrameRateMs = 1000 / FrameRateSecs;
+					
+					setTimeout( RenderLoop, FrameRateMs );
+					//window.requestAnimationFrame(RenderLoop);
 				};
-				
+					
 				RenderLoop();
-            }
+			}
 
 			function RegisterServer(Socket)
 			{
