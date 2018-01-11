@@ -86,6 +86,11 @@ Input, Select
 	background-color:	#fbb;
 }
 
+#LogMessages span.MessageBox
+{
+	display:	block;
+}
+
 header div, header h1
 {
 	margin: 0pt;
@@ -1101,9 +1106,23 @@ input[type=range]:after
 						LogMessage("Failed to get video user media");
 						console.log(Error);
 					};
-					var Constraints = { 'video':true, 'audio':false };
+					
+					
+					//	enum devices first
+					var EnumDevices = function(Devices)
+					{
+						var EnumDevice = function(Device)
+						{
+							LogMessage("Device found: " + Device.label + " (" + Device.kind + ") id=" + Device.deviceId );
+						}
+						Devices.forEach(EnumDevice);
+					};
+					navigator.mediaDevices.enumerateDevices().then(EnumDevices);
+
+					var Constraints = { 'video':true };
 					//	nop until stream works
 					DrawFrame = function(){	return false;	};
+					
 					navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess).catch(OnError);
 				}
 
