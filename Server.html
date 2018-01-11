@@ -1036,12 +1036,14 @@ input[type=range]:after
 							}
 						};
 					};
-					var OnError = function()
+					var OnError = function(Error)
 					{
+						//	gr: this also handles any exceptions in OnSuccess
 						LogMessage("Failed to get video user media");
+						console.log(Error);
 					};
 					var Constraints = { 'video':true, 'audio':false };
-					navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess);//.catch(OnError);
+					navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess).catch(OnError);
 				}
 
 
@@ -1054,6 +1056,7 @@ input[type=range]:after
 					var FrameRateSecs = GetElementValue(FrameRate);
 					var FrameRateMs = 1000 / FrameRateSecs;
 					
+					//	control frame rate by the loop timeout
 					setTimeout( RenderLoop, FrameRateMs );
 					//window.requestAnimationFrame(RenderLoop);
 				};
