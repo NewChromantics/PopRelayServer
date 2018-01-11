@@ -208,7 +208,7 @@ input[type=range]:after
 				<label for="UseWebcam">Use Web Cam</label>
 			</div>
 			<div>
-				<input type="checkbox" id="ResizeWebcamCanvas" name="ResizeWebcamCanvas" value=true xxchecked/>
+				<input type="checkbox" id="ResizeWebcamCanvas" name="ResizeWebcamCanvas" value=true checked/>
 				<label for="ResizeWebcamCanvas">Resize to camera</label>
 			</div>
 			<div>
@@ -226,7 +226,11 @@ input[type=range]:after
 				<label for="JpegQualitySlider">Jpeg Quality</label>
 			</div>
 			<div>
-				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas','WebcamRecorder','JpegQualitySlider','WebcamEncoding','UseWebcam','ResizeWebcamCanvas','WebcamFrameRate') />
+				<input type="checkbox" id="WebcamShowDownload" name="WebcamShowDownload" value=true />
+				<label for="WebcamShowDownload">Show Download</label>
+			</div>
+			<div>
+				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas','WebcamRecorder','JpegQualitySlider','WebcamEncoding','UseWebcam','ResizeWebcamCanvas','WebcamFrameRate','WebcamShowDownload'); />
 			</div>
 			<div>Launch Chrome executable with: --enable-features=WebRTC-H264WithOpenH264FFmpeg</div>
 			<canvas id=WebcamCanvas />
@@ -498,6 +502,19 @@ input[type=range]:after
 				};
 			}
 
+
+			function GetDownloadDivBlob(Blob,Filename)
+			{
+				var bloburl = URL.createObjectURL(Blob);
+				var linkdiv = document.createElement('div');
+				var link = document.createElement('a');
+				link.href = bloburl;
+				//link.download = Filename;
+				link.innerHTML = Filename;
+				linkdiv.appendChild(link);
+				return linkdiv;
+			}
+		
 			function IsString(Variable)
 			{
 				return typeof Variable == 'string' || Variable instanceof String;
@@ -536,6 +553,23 @@ input[type=range]:after
 				}
 					
 				return Element.value;
+			}
+		
+			function SetElementValue(Element,Value)
+			{
+				var Element = GetElement(Element);
+				console.log("SetElementValue(" + Element + "," + Value + ")");
+				//console.log(Element);
+				
+				//	gr: a range input has false for checked :/
+				if ( Element.checked !== undefined && Element.type!=="range")
+				{
+					//console.log("checked="+Element.checked);
+					Element.checked = Value;
+					return;
+				}
+				
+				Element.value = Value;
 			}
 
 			function StartMicRecording(StreamName,Canvas,StreamDiv,Encoding,Compression,ShowDownload,OggQualitySlider,OggChunkDuration)
@@ -683,14 +717,8 @@ input[type=range]:after
 							if ( ShowDownloadLink )
 							{
 								var blob = Stream.VorbisEncoder.finish();
-								var bloburl = URL.createObjectURL(blob);
-								var linkdiv = document.createElement('div');
-								var link = document.createElement('a');
-								link.href = bloburl;
-								link.download = "stream.ogg";
-								link.innerHTML = "Download";
-								linkdiv.appendChild(link);
-								StreamDiv.appendChild(linkdiv);
+								var BlobDownloadDiv = GetDownloadDivBlob(blob,'stream.ogg');
+								StreamDiv.appendChild(BlobDownloadDiv);
 							}
 							
 							//	reset
@@ -889,7 +917,7 @@ input[type=range]:after
 				return "hsl(" + Hue + "," + Sat + "," + Lum + ")";
 			}
 
-            function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding,UseWebcam,ResizeCanvas,FrameRate)
+            function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding,UseWebcam,ResizeCanvas,FrameRate,ShowDownload)
             {
 				StreamDiv = GetElement(StreamDiv);
                 StreamName = GetElementValue(StreamName);
@@ -898,6 +926,7 @@ input[type=range]:after
 				var TargetSocket = ServerSocket;
 				
 				var Stream = new TStream(StreamName,TargetSocket,StreamDiv);
+				Stream.FrameCount = 0;
 				
                 var OnNewFrame = function()
                 {
@@ -923,6 +952,13 @@ input[type=range]:after
 						};
 						var SendPng = function(Blob)
 						{
+							var ShowDownloadLink = GetElementValue(ShowDownload);
+							if ( ShowDownloadLink )
+							{
+								StreamDiv.appendChild( GetDownloadDivBlob(Blob,'stream.png') );
+								SetElementValue(ShowDownload,false);
+							}
+												  
 							BlobToBytes( Blob, SendPngBytes );
 						};
 						Canvas.toBlob( SendPng , 'image/png' );
@@ -939,6 +975,13 @@ input[type=range]:after
 						};
 						var SendJpeg = function(Blob)
 						{
+							var ShowDownloadLink = GetElementValue(ShowDownload);
+							if ( ShowDownloadLink )
+							{
+								StreamDiv.appendChild( GetDownloadDivBlob(Blob,'stream.jpeg') );
+								SetElementValue(ShowDownload,false);
+							}
+							
 							BlobToBytes( Blob, SendJpegBytes );
 						};
 						Canvas.toBlob( SendJpeg , 'image/jpeg', Quality );
@@ -981,6 +1024,7 @@ input[type=range]:after
 						return Math.min( Height, Math.max( 0, p ) );
 					};
 					Context.fillRect( ClampX(x-Size), ClampY(y-Size),Size,Size);
+					Stream.FrameCount++;
                 };
 				
 				
@@ -995,6 +1039,7 @@ input[type=range]:after
 
 						//	need a video element to capture to
 						var Video = document.createElement('video');
+						Video.style.display = 'none';
 						StreamDiv.appendChild(Video);
 						var StreamUrl = window.URL.createObjectURL(Stream);
 						Video.src = StreamUrl;
@@ -1019,21 +1064,35 @@ input[type=range]:after
 						{
 							var w = Video.videoWidth;
 							var h = Video.videoHeight;
-							if ( w > 0 && h > 0 )
+							if ( w <= 0 || h <= 0 )
+								return false;
+								
+							var DoResizeCanvas = GetElementValue(ResizeCanvas);
+							if ( DoResizeCanvas )
 							{
-								var DoResizeCanvas = GetElementValue(ResizeCanvas);
-								if ( DoResizeCanvas )
-								{
-									//	gr: this seems to stretch the canvas but not actually resize the element...
-									Canvas.width = w;
-									Canvas.height = h;
-								}
-								//	draw centered
-								///var x = Canvas.width -
-								var x = (Canvas.width - w) / 2;
-								var y = (Canvas.height - h) / 2;
-								Canvas.getContext('2d').drawImage(Video, x, y);
+								//	gr: this seems to stretch the canvas but not actually resize the element...
+								Canvas.width = w;
+								Canvas.height = h;
+								Canvas.style.height = h + 'px';
+								Canvas.style.width = w + 'px';
 							}
+							//	draw centered
+							var cx = 0;
+							var cy = 0;
+							var cw = Canvas.width;
+							var ch = Canvas.height;
+							var ix = 0;
+							var iy = 0;
+							var iw = cw;
+							var ih = ch;
+							/*
+							var srcx = (cw - w) / 2;
+							var srcy = (ch - h) / 2;
+							var Ratio = w / h;
+							 */
+							
+							Canvas.getContext('2d').drawImage(Video, ix, iy, iw, ih, cx, cy, cw, ch );
+							Stream.FrameCount++;
 						};
 					};
 					var OnError = function(Error)
@@ -1043,6 +1102,8 @@ input[type=range]:after
 						console.log(Error);
 					};
 					var Constraints = { 'video':true, 'audio':false };
+					//	nop until stream works
+					DrawFrame = function(){	return false;	};
 					navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess).catch(OnError);
 				}
 
@@ -1050,9 +1111,8 @@ input[type=range]:after
 				//  read bytes of canvas and send
 				var RenderLoop = function()
 				{
-					DrawFrame();
-					OnNewFrame();
-
+					if ( DrawFrame() !== false )
+						OnNewFrame();
 					var FrameRateSecs = GetElementValue(FrameRate);
 					var FrameRateMs = 1000 / FrameRateSecs;
 					
