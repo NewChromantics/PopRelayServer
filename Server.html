@@ -44,9 +44,9 @@ xxxa
 	text-align:	left;
 }
 
-Input
+Input, Select
 {
-	margin:		10px;
+	margin:		5pt;
 }
 
 /* off at start */
@@ -113,6 +113,26 @@ header:after, #MicRecorder:after
 	background:	green;
 }
 
+/*
+http://jsfiddle.net/RjWJ8/
+ 
+	add
+ onchange/oninput="this.setAttribute('value',this.value);
+*/
+input[type=range]
+{
+	margin-right:	25pt;
+}
+
+input[type=range]:after
+{
+	margin-right:	-20pt;
+	content:		attr(value);
+	color:			#000;
+	xposition:		absolute;
+	xright:			0px;
+}
+
 </style>
 <script src="SoyWebsocket-1.0.js"></script>
 </head>
@@ -139,7 +159,10 @@ header:after, #MicRecorder:after
 		<div id=MicRecorder>
 			<div>
 				<h2>Mic Recorder</h2>
-				
+				<div>
+					<input type="text" id="MicrophoneStreamName" name="MicrophoneStreamName" value="Microphone">
+					<label for="MicrophoneStreamName">Stream Name</label>
+				</div>
 				<div>
 					<select id=MicrophoneEncoding>
 						<option value="Pcm8">Pcm8</option>
@@ -153,15 +176,41 @@ header:after, #MicRecorder:after
 					</select>
 				</div>
 				<div>
+					<input type="range" id="OggQualitySlider" name="OggQualitySlider" min="0" max="100" value="50" oninput="this.setAttribute('value',this.value);" />
+					<label for="OggQualitySlider">Ogg Quality</label>
+				</div>
+				<div>
+					<input type="range" id="OggChunkDuration" name="OggChunkDuration" min="0" max="30000" step="200" value="1000" oninput="this.setAttribute('value',this.value);" />
+					<label for="OggChunkDuration">Ogg Chunk Duration Millisecs</label>
+				</div>
+				<div>
 					<input type="checkbox" id="MicrophoneShowDownload" name="MicrophoneShowDownload" value=true>
 					<label for="MicrophoneShowDownload">Show Download</label>
 				</div>
 				<div>
-					<input type=button value="Record Mic" onclick=StartMicRecording('Microphone','MicrophoneCanvas','MicRecorder','MicrophoneEncoding','MicrophoneCompression','MicrophoneShowDownload') />
+					<input type=button value="Record Microphone" onclick=StartMicRecording('MicrophoneStreamName','MicrophoneCanvas','MicRecorder','MicrophoneEncoding','MicrophoneCompression','MicrophoneShowDownload','OggQualitySlider','OggChunkDuration') />
 				</div>
 			</div>
 			<canvas id=MicrophoneCanvas />
 		</div>
+		
+		
+		<div id=MicRecorder>
+			<div>
+				<h2>Camera Recorder</h2>
+			</div>
+			<div>
+				<input type="text" id="WebcamStreamName" name="WebcamStreamName" value="Webcam">
+				<label for="WebcamStreamName">Stream Name</label>
+			</div>
+			<div>
+				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas') />
+			</div>
+			<div>Launch Chrome executable with: --enable-features=WebRTC-H264WithOpenH264FFmpeg</div>
+			<canvas id=WebcamCanvas />
+		</div>
+		
+
 
 		<div id=LastTextMessage></div>
 		<div id=TextFrameRate>X fps</div>
@@ -419,17 +468,35 @@ header:after, #MicRecorder:after
 				return Element;
 			}
 		
-			function GetElementValue(Element)
+			function GetElementValue(Element,Normalise)
 			{
 				var Element = GetElement(Element);
-				console.log(Element);
-				if ( Element.checked !== undefined )
+				//console.log("GetElementValue(" + Element + "," + Normalise + ")");
+				//console.log(Element);
+				
+				//	gr: a range input has false for checked :/
+				if ( Element.checked !== undefined && Element.type!=="range")
+				{
+					//console.log("checked="+Element.checked);
 					return Element.checked;
+				}
+				
+				if ( Element.min !== undefined && Element.max !== undefined && Normalise === true )
+				{
+					var Value = Element.value;
+					var Min = Element.min;
+					var Max = Element.max;
+					Value = (Value-Min) / (Max-Min);
+					//console.log("Normalised="+Value);
+					return Value;
+				}
+					
 				return Element.value;
 			}
 
-			function StartMicRecording(StreamName,Canvas,StreamDiv,Encoding,Compression,ShowDownload)
+			function StartMicRecording(StreamName,Canvas,StreamDiv,Encoding,Compression,ShowDownload,OggQualitySlider,OggChunkDuration)
 			{
+				StreamName = GetElementValue(StreamName);
 				Encoding = GetElementValue(Encoding);
 				Compression = GetElementValue(Compression);
 				
@@ -506,7 +573,7 @@ header:after, #MicRecorder:after
 						{
 							var SampleRate = 44100;
 							var Channels = 1;
-							var Quality = 0.5;
+							var Quality = GetElementValue(OggQualitySlider,true);
 							
 							Stream.VorbisEncoder = new OggVorbisEncoder(SampleRate,Channels,Quality);
 							Stream.StartTime = GetTimeMs();
@@ -534,13 +601,11 @@ header:after, #MicRecorder:after
 						if ( Stream.VorbisEncoder.oggBuffers.length == 0 )
 							return;
 						
-						var BufferWholeFiles = 0.5;
-						//BufferWholeFiles = false;
+						var MinDurationMs = GetElementValue(OggChunkDuration);
 						var MinBufferBuffer = 3;
 						
-						if ( BufferWholeFiles !== false )
+						if ( MinDurationMs != 0 )
 						{
-							var MinDurationMs = BufferWholeFiles * 1000;
 							var Duration = GetTimeMs() - Stream.StartTime;
 							if ( Duration < MinDurationMs )
 								return;
