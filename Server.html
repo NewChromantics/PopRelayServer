@@ -78,7 +78,7 @@ Input, Select
 	background-color:	#bfb;
 }
 
-.MessageBox, #LastTextMessage, #LastErrorMessage, #TextFrameRate, #LastImageBox, #MicRecorder
+.MessageBox, #LastTextMessage, #LastErrorMessage, #TextFrameRate, #LastImageBox
 {
 	margin:		10px;
 	padding:	10px;
@@ -92,20 +92,20 @@ header div, header h1
 	float:	left;
 }
 
-header:after, #MicRecorder:after
+header:after, .MessageBox:after
 {
 	clear:		both;
 	content:	"";
 	display:	block;
 }
 
-#MicRecorder canvas, #MicRecorder > div
+.MessageBox canvas, .MessageBox > div
 {
 	float:		left;
 	margin:		0.5em;
 }
 
-#MicRecorder canvas
+.MessageBox canvas
 {
 	display:	none;
 	height:		10em;
@@ -156,7 +156,7 @@ input[type=range]:after
 	</header>
 	
 	
-		<div id=MicRecorder>
+		<div id=MicRecorder class=MessageBox>
 			<div>
 				<h2>Mic Recorder</h2>
 				<div>
@@ -195,7 +195,7 @@ input[type=range]:after
 		</div>
 		
 		
-		<div id=MicRecorder>
+		<div id=WebcamRecorder class=MessageBox>
 			<div>
 				<h2>Camera Recorder</h2>
 			</div>
@@ -204,7 +204,17 @@ input[type=range]:after
 				<label for="WebcamStreamName">Stream Name</label>
 			</div>
 			<div>
-				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas') />
+				<select id=WebcamEncoding>
+					<option value="Jpeg">Jpeg</option>
+					<option value="Png">Png</option>
+				</select>
+			</div>
+			<div>
+				<input type="range" id="JpegQualitySlider" name="JpegQualitySlider" min="0" max="100" value="50" oninput="this.setAttribute('value',this.value);" />
+				<label for="JpegQualitySlider">Jpeg Quality</label>
+			</div>
+			<div>
+				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas','WebcamRecorder','JpegQualitySlider','WebcamEncoding') />
 			</div>
 			<div>Launch Chrome executable with: --enable-features=WebRTC-H264WithOpenH264FFmpeg</div>
 			<canvas id=WebcamCanvas />
@@ -227,7 +237,29 @@ input[type=range]:after
 			var Format_OggVorbis = 'OggVorbis';
 			var Format_Base64 = 'Base64';
 			var Format_Hex = 'Hex';
+			var Format_Jpeg = 'Jpeg';
+			var Format_Png = 'Png';
 			
+			
+			function BlobToBytes(Blob,OnBytes)
+			{
+				var ArrayBufferToBytes = function(Buffer)
+				{
+					var Bytes = new Uint8Array(Buffer);
+					OnBytes(Bytes);
+				};
+				BlobToArrayBuffer( Blob, ArrayBufferToBytes );
+			}
+			
+			function BlobToArrayBuffer(Blob,OnArrayBuffer)
+			{
+				var fileReader = new FileReader();
+				fileReader.onload = function() {
+					OnArrayBuffer( this.result );
+				};
+				fileReader.readAsArrayBuffer(Blob);
+			}
+		
 			function GetDataMatchPos(Data,MatchStr)
 			{
 				for (var d=0;	d<Data.length-MatchStr.length;	d++ )
@@ -741,7 +773,7 @@ input[type=range]:after
 					}
 					
 					
-					Stream.Send( Buffer, Encoding, Timecode, Keyframe, Meta );
+					Stream.Send( Buffer, Encodings, Timecode, Keyframe, Meta );
 				};
 				
 				
@@ -838,7 +870,117 @@ input[type=range]:after
 				}
 
 			}
+		
+			function hsl(Hue,Sat,Lum)
+			{
+				//	hsl for css/etc is just a css string
+				return "hsl(" + Hue + "," + Sat + "," + Lum + ")";
+			}
 
+            function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding)
+            {
+                StreamName = GetElementValue(StreamName);
+                Canvas = GetElement(Canvas);
+				var TargetSocket = ServerSocket;
+				
+				var Stream = new TStream(StreamName,TargetSocket,StreamDiv);
+				
+                var OnNewFrame = function()
+                {
+					var Encodings = [];
+					
+					var Encoding = GetElementValue(StreamEncoding);
+					var Sen
+					var Timecode = GetTimeMs();
+					var Keyframe = false;
+					var Meta = {};
+
+					var Send = function(Buffer)
+					{
+						Stream.Send( Buffer, Encodings, Timecode, Keyframe, Meta );
+					};
+					
+					if ( Encoding == Format_Png )
+					{
+						var SendPngBytes = function(Bytes)
+						{
+							Encodings.shift( Encoding );
+							Send( Bytes );
+						};
+						var SendPng = function(Blob)
+						{
+							BlobToBytes( Blob, SendPngBytes );
+						};
+						Canvas.toBlob( SendPng , 'image/png' );
+						return;
+					}
+
+					if ( Encoding == Format_Jpeg )
+					{
+						var Quality = GetElementValue(JpegQualitySlider,true);
+						var SendJpegBytes = function(Bytes)
+						{
+							Encodings.shift( Encoding );
+							Send( Bytes );
+						};
+						var SendJpeg = function(Blob)
+						{
+							BlobToBytes( Blob, SendJpegBytes );
+						};
+						Canvas.toBlob( SendJpeg , 'image/jpeg', Quality );
+						return;
+					}
+					
+					//	if we've reached here, assume its not a deffered encode
+					Send(Buffer);
+                };
+                
+                var DrawFrame = function()
+                {
+					//	show
+					Canvas.style.display = 'block';
+					var Context = Canvas.getContext('2d');
+					var Width = Canvas.width;
+					var Height = Canvas.height;
+					var HalfHeight = Height / 2;
+					var HalfWidth = Width / 2;
+					
+					//	clear to changing colour
+					var TimeRange = 10 * 1000;
+					var HueNorm = (GetTimeMs() % TimeRange) / TimeRange;
+					var Hue = HueNorm * 360;
+					Context.fillStyle = hsl(Hue, '50%', '50%');
+					Context.fillRect(0,0,Width,Height);
+					
+					//	that's a bit too subtle, lets put something on screen
+					var x = HalfWidth + Math.cos(GetTimeMs() / 100) * 50;
+					var y = HalfHeight + Math.sin(GetTimeMs() / 100) * 50;
+					
+					var Size = 20;
+					Context.fillStyle = '#000000';
+					var ClampX = function(p)
+					{
+						return Math.min( Width, Math.max( 0, p ) );
+					};
+					var ClampY = function(p)
+					{
+						return Math.min( Height, Math.max( 0, p ) );
+					};
+					Context.fillRect( ClampX(x-Size), ClampY(y-Size),Size,Size);
+					
+					
+					OnNewFrame();
+                };
+                
+                //  read bytes of canvas and send
+				var RenderLoop = function()
+				{
+					DrawFrame();
+					window.requestAnimationFrame(RenderLoop);
+				};
+				
+				RenderLoop();
+            }
 
 			function RegisterServer(Socket)
 			{
