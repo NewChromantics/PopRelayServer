@@ -204,6 +204,13 @@ input[type=range]:after
 			<div>
 				<h2>Camera Recorder</h2>
 			</div>
+			
+			<div>
+				<select id=WebcamDeviceId>
+					<script>var Parent = document.scripts[document.scripts.length-1].parentNode;	document.addEventListener('DOMContentLoaded', function(){	PopulateVideoSources(Parent);	} );</script>
+				</select>
+			</div>
+			
 			<div>
 				<input type="text" id="WebcamStreamName" name="WebcamStreamName" value="Webcam" />
 				<label for="WebcamStreamName">Stream Name</label>
@@ -235,7 +242,7 @@ input[type=range]:after
 				<label for="WebcamShowDownload">Show Download</label>
 			</div>
 			<div>
-				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas','WebcamRecorder','JpegQualitySlider','WebcamEncoding','UseWebcam','ResizeWebcamCanvas','WebcamFrameRate','WebcamShowDownload'); />
+				<input type=button value="Record Camera" onclick=StartWebcamRecording('WebcamStreamName','WebcamCanvas','WebcamRecorder','JpegQualitySlider','WebcamEncoding','UseWebcam','ResizeWebcamCanvas','WebcamFrameRate','WebcamShowDownload','WebcamDeviceId'); />
 			</div>
 			<div>Launch Chrome executable with: --enable-features=WebRTC-H264WithOpenH264FFmpeg</div>
 			<canvas id=WebcamCanvas />
@@ -260,6 +267,8 @@ input[type=range]:after
 			var Format_Hex = 'Hex';
 			var Format_Jpeg = 'Jpeg';
 			var Format_Png = 'Png';
+			
+			
 			
 			
 			function BlobToBytes(Blob,OnBytes)
@@ -916,14 +925,45 @@ input[type=range]:after
 
 			}
 		
+			function EnumMediaDevices(OnEnumDevice)
+			{
+				var EnumDevices = function(Devices)
+				{
+					Devices.forEach(OnEnumDevice);
+				};
+				
+				//	todo: .catch denial
+				navigator.mediaDevices.enumerateDevices().then(EnumDevices);
+			}
+		
+			function PopulateVideoSources(SelectElement)
+			{
+				SelectElement = GetElement(SelectElement);
+				
+				var EnumDevice = function(Device)
+				{
+					console.log(Device);
+					if ( Device.kind != 'videoinput' )
+						return;
+					var Option = document.createElement("option");
+					Option.text = Device.label;
+					Option.value = Device.deviceId;
+					SelectElement.add(Option);
+					console.log(SelectElement);
+				};
+				EnumMediaDevices( EnumDevice );
+			}
+		
+		
 			function hsl(Hue,Sat,Lum)
 			{
 				//	hsl for css/etc is just a css string
 				return "hsl(" + Hue + "," + Sat + "," + Lum + ")";
 			}
 
-            function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding,UseWebcam,ResizeCanvas,FrameRate,ShowDownload)
+            function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding,UseWebcam,ResizeCanvas,FrameRate,ShowDownload,WebcamDevice)
             {
+				WebcamDevice = GetElementValue(WebcamDevice);
 				StreamDiv = GetElement(StreamDiv);
                 StreamName = GetElementValue(StreamName);
                 Canvas = GetElement(Canvas);
@@ -1107,22 +1147,17 @@ input[type=range]:after
 						console.log(Error);
 					};
 					
-					
-					//	enum devices first
-					var EnumDevices = function(Devices)
+					var Constraints =
 					{
-						var EnumDevice = function(Device)
+						'video':
 						{
-							LogMessage("Device found: " + Device.label + " (" + Device.kind + ") id=" + Device.deviceId );
+							optional: [{sourceId: WebcamDevice}]
 						}
-						Devices.forEach(EnumDevice);
 					};
-					navigator.mediaDevices.enumerateDevices().then(EnumDevices);
-
-					var Constraints = { 'video':true };
 					//	nop until stream works
 					DrawFrame = function(){	return false;	};
 					
+					WebcamDevice
 					navigator.mediaDevices.getUserMedia(Constraints).then(OnSuccess).catch(OnError);
 				}
 
