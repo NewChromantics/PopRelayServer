@@ -169,6 +169,12 @@ input[type=range]:after
 					<label for="MicrophoneStreamName">Stream Name</label>
 				</div>
 				<div>
+					<select id=MicrophoneDeviceId>
+						<script>{let Parent = document.scripts[document.scripts.length-1].parentNode;	document.addEventListener('DOMContentLoaded', function(){	PopulateAudioSources(Parent);	} );}</script>
+					</select>
+				</div>
+				
+				<div>
 					<select id=MicrophoneEncoding>
 						<option value="Pcm8">Pcm8</option>
 						<option value="Pcm16">Pcm16</option>
@@ -207,7 +213,7 @@ input[type=range]:after
 			
 			<div>
 				<select id=WebcamDeviceId>
-					<script>var Parent = document.scripts[document.scripts.length-1].parentNode;	document.addEventListener('DOMContentLoaded', function(){	PopulateVideoSources(Parent);	} );</script>
+					<script>{let Parent = document.scripts[document.scripts.length-1].parentNode;	document.addEventListener('DOMContentLoaded', function(){	PopulateVideoSources(Parent);	} );}</script>
 				</select>
 			</div>
 			
@@ -938,22 +944,40 @@ input[type=range]:after
 		
 			function PopulateVideoSources(SelectElement)
 			{
+				//console.log("PopulateVideoSources()");
+				//console.log(SelectElement);
 				SelectElement = GetElement(SelectElement);
 				
 				var EnumDevice = function(Device)
 				{
-					console.log(Device);
 					if ( Device.kind != 'videoinput' )
 						return;
 					var Option = document.createElement("option");
 					Option.text = Device.label;
 					Option.value = Device.deviceId;
 					SelectElement.add(Option);
-					console.log(SelectElement);
 				};
 				EnumMediaDevices( EnumDevice );
 			}
 		
+		
+			function PopulateAudioSources(SelectElement)
+			{
+				//console.log("PopulateAudioSources()");
+				//console.log(SelectElement);
+				SelectElement = GetElement(SelectElement);
+				
+				var EnumDevice = function(Device)
+				{
+					if ( Device.kind != 'audioinput' )
+						return;
+					var Option = document.createElement("option");
+					Option.text = Device.label;
+					Option.value = Device.deviceId;
+					SelectElement.add(Option);
+				};
+				EnumMediaDevices( EnumDevice );
+			}
 		
 			function hsl(Hue,Sat,Lum)
 			{
