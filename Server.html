@@ -217,6 +217,9 @@ input[type=range]:after
 				</select>
 			</div>
 			
+			<!--
+			<div><video autoplay playsinline></video></div>
+			-->
 			<div>
 				<input type="text" id="WebcamStreamName" name="WebcamStreamName" value="Webcam" />
 				<label for="WebcamStreamName">Stream Name</label>
@@ -556,7 +559,7 @@ input[type=range]:after
 				//console.log(Element);
 				
 				//	gr: a range input has false for checked :/
-				if ( Element.checked !== undefined && Element.type!=="range")
+				if ( Element.checked !== undefined && Element.type=="checkbox")
 				{
 					//console.log("checked="+Element.checked);
 					return Element.checked;
@@ -984,6 +987,23 @@ input[type=range]:after
 				//	hsl for css/etc is just a css string
 				return "hsl(" + Hue + "," + Sat + "," + Lum + ")";
 			}
+		
+			function ShowCameraControls(Track,StreamDiv,FrameRateSlider)
+			{
+				console.log(Track);
+				let Settings = Track.getSettings();
+				let Caps = Track.getCapabilities();
+				console.log(Settings);
+				console.log(Caps);
+				
+				if ( Settings.frameRate )
+				{
+					FrameRateSlider = GetElement(FrameRateSlider);
+					FrameRateSlider.max = Settings.frameRate;
+					FrameRateSlider.value = Math.min( FrameRateSlider.value, FrameRateSlider.max );
+					console.log(FrameRateSlider);
+				}
+			}
 
             function StartWebcamRecording(StreamName,Canvas,StreamDiv,JpegQualitySlider,StreamEncoding,UseWebcam,ResizeCanvas,FrameRate,ShowDownload,WebcamDevice)
             {
@@ -1016,7 +1036,7 @@ input[type=range]:after
 					{
 						var SendPngBytes = function(Bytes)
 						{
-							Encodings.shift( Encoding );
+							Encodings.unshift( Encoding );
 							Send( Bytes );
 						};
 						var SendPng = function(Blob)
@@ -1039,7 +1059,7 @@ input[type=range]:after
 						var Quality = GetElementValue(JpegQualitySlider,true);
 						var SendJpegBytes = function(Bytes)
 						{
-							Encodings.shift( Encoding );
+							Encodings.unshift( Encoding );
 							Send( Bytes );
 						};
 						var SendJpeg = function(Blob)
@@ -1104,8 +1124,8 @@ input[type=range]:after
 					{
 						console.log("Got video stream");
 						console.log(Stream);
-						Stream.onended = function()	{	LogMessage("Stream Ended");	};
-
+						Stream.FirstFrame = true;
+						
 						//	need a video element to capture to
 						var Video = document.createElement('video');
 						Video.style.display = 'none';
@@ -1128,14 +1148,36 @@ input[type=range]:after
 							console.log("Draw frame");
 							Canvas.getContext('2d').drawImage(Video, 0, 0);
 						};
-						 */
+						*/
+						let SetupControls = function()
+						{
+							var Tracks = Stream.getVideoTracks();
+							if ( Tracks.length > 1 )
+							{
+								console.log(Tracks);
+								LogMessage("Warning: Stream has more than one (" + Tracks.length + ") tracks");
+							}
+							else if ( Tracks.length == 1 )
+							{
+								ShowCameraControls( Tracks[0], StreamDiv, FrameRate );
+							}
+						};
+						
+						
+						
 						DrawFrame = function()
 						{
 							var w = Video.videoWidth;
 							var h = Video.videoHeight;
 							if ( w <= 0 || h <= 0 )
 								return false;
-								
+							
+							if ( Stream.FirstFrame )
+							{
+								SetupControls();
+								Stream.FirstFrame = false;
+							}
+							
 							var DoResizeCanvas = GetElementValue(ResizeCanvas);
 							if ( DoResizeCanvas )
 							{
@@ -1159,7 +1201,6 @@ input[type=range]:after
 							var srcy = (ch - h) / 2;
 							var Ratio = w / h;
 							 */
-							
 							Canvas.getContext('2d').drawImage(Video, ix, iy, iw, ih, cx, cy, cw, ch );
 							Stream.FrameCount++;
 						};
